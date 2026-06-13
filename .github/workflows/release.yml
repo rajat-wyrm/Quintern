@@ -1,0 +1,150 @@
+name: 🚀 Release
+
+# Auto-build and publish a GitHub Release whenever a semver tag is pushed.
+# Usage:  git tag v2026.06.1 && git push --tags origin main
+# Then this workflow:
+#   1. Runs the full CI suite (so a tag can never be on a broken build)
+#   2. Builds backend + frontend (Vite production build → dist/)
+#   3. Zips the artifacts
+#   4. Creates a GitHub Release with auto-generated notes from merged PRs
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v2026.06.1)'
+        required: true
+        type: string
+
+permissions:
+  contents: write   # to create the release + upload assets
+
+jobs:
+  test:
+    name: Run CI suite
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: internops_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/internops_test
+      JWT_SECRET: ci-test-secret-do-not-use-in-prod
+      CORS_ORIGIN: http://localhost:5173
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v5
+        with: { node-version: 22, cache: 'npm', cache-dependency-path: backend/package-lock.json }
+      - run: cd backend && npm ci
+      - run: |
+          until pg_isready -h localhost -p 5432 -U postgres; do
+            echo "Waiting for PostgreSQL..."; sleep 2
+          done
+      - run: cd backend && npm run migrate
+      - run: cd backend && npm run seed
+      - run: cd backend && npm test -- --forceExit --detectOpenHandles --runInBand
+
+  release:
+    name: Build & publish release
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0 }
+
+      - uses: actions/setup-node@v5
+        with: { node-version: 22, cache: 'npm' }
+
+      - name: Determine tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ inputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install backend + build frontend
+        run: |
+          cd backend
+          npm ci
+          echo "Backend ready (server-runtime, no compile step)"
+        env:
+          DATABASE_URL: postgresql://noop:noop@localhost:1/noop
+          JWT_SECRET: build-time-only
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+          echo "Frontend built: $(du -sh dist | cut -f1)"
+
+      - name: Package artifacts
+        run: |
+          mkdir -p release-artifacts
+          # Frontend SPA (static)
+          cd frontend && tar -czf ../release-artifacts/frontend-${{ steps.tag.outputs.tag }}.tar.gz dist
+          # Backend runtime
+          cd backend && tar -czf ../release-artifacts/backend-${{ steps.tag.outputs.tag }}.tar.gz \
+            --exclude=node_modules --exclude=coverage --exclude=uploads \
+            --exclude=.env --exclude=__tests__ --exclude=tests \
+            --exclude='*.test.js' .
+          # Docker compose
+          cd .. && tar -czf release-artifacts/docker-${{ steps.tag.outputs.tag }}.tar.gz \
+            docker-compose.production.yml Dockerfile
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: 'Uptoskills Workforce Platform ${{ steps.tag.outputs.tag }}'
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(steps.tag.outputs.tag, '-rc') || contains(steps.tag.outputs.tag, '-beta') }}
+          files: |
+            release-artifacts/frontend-${{ steps.tag.outputs.tag }}.tar.gz
+            release-artifacts/backend-${{ steps.tag.outputs.tag }}.tar.gz
+            release-artifacts/docker-${{ steps.tag.outputs.tag }}.tar.gz
+          body: |
+            ## Uptoskills Workforce Platform — ${{ steps.tag.outputs.tag }}
+
+            Auto-built from commit `${{ github.sha }}` on branch `${{ github.ref_name }}`.
+
+            ### What's included
+            - **Backend** (Fastify + PostgreSQL + JWT) — `backend-${{ steps.tag.outputs.tag }}.tar.gz`
+            - **Frontend** (React + Vite) — `frontend-${{ steps.tag.outputs.tag }}.tar.gz`
+            - **Docker compose** (production stack) — `docker-${{ steps.tag.outputs.tag }}.tar.gz`
+
+            ### Deploy
+            ```bash
+            # Pull + run
+            docker compose -f docker-compose.production.yml up -d
+
+            # Or extract and run manually
+            tar -xzf backend-${{ steps.tag.outputs.tag }}.tar.gz
+            cd backend && npm ci --production && node src/app.js
+            tar -xzf frontend-${{ steps.tag.outputs.tag }}.tar.gz
+            ```
+
+            See `README.md` for full configuration and `.env.example` for environment variables.
+
+            _Generated automatically by the Release workflow._
+
+      - name: Cleanup
+        if: always()
+        run: rm -rf release-artifacts

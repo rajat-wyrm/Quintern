@@ -3,11 +3,13 @@ name: InternOps CI
 on:
   push:
     branches:
+      - main
       - master
       - 'feature/*'
       - 'release/*'
   pull_request:
     branches:
+      - main
       - master
       - 'release/*'
 
