@@ -5,3 +5,38 @@ coverage/
 .env*
 *.log
 package-lock.json
+
+# ---------------------------------------------------------------------------
+#  CI formatting ignores
+#  Prettier is a JS/TS/CSS/JSON/MD formatter. Skip anything that isn't:
+# ---------------------------------------------------------------------------
+
+# YAML configs (handled by yamllint, not Prettier)
+*.yml
+*.yaml
+docker-compose*.yml
+prometheus.yml
+load-test.yml
+.github/workflows/
+
+# Build / install artifacts
+public/
+backend/uploads/
+backend/coverage/
+frontend/dist/
+
+# Generated lockfiles
+yarn.lock
+pnpm-lock.yaml
+
+# Test results / cache
+**/.cache/
+**/__snapshots__/
+
+# Generated API / type files
+*.generated.*
+*.d.ts
+
+# Vendor / third-party (not in node_modules, but kept safe)
+vendor/
+third_party/
