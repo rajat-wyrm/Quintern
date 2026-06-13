@@ -11,13 +11,18 @@ on:
       - main
       - 'release/*'
 
+concurrency:
+  group: format-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   format:
     name: Prettier Check
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -33,9 +38,10 @@ jobs:
         run: |
           set -o pipefail
           npx --yes prettier@3 --check . > prettier.log 2>&1 || {
-            echo "::group::Prettier output (first 80 lines)"
-            head -80 prettier.log || true
+            echo "::group::Prettier output (first 100 lines)"
+            head -100 prettier.log || true
             echo "::endgroup::"
             echo "::error::Prettier found unformatted files. Run 'npx prettier --write .' locally and push again."
             exit 1
           }
+          echo "✓ All files match Prettier code style"

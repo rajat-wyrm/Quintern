@@ -10,11 +10,18 @@ on:
   pull_request:
     branches:
       - main
-      - master
       - 'release/*'
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
 
 jobs:
   test:
+    name: Test (Jest + migrations + build)
     runs-on: ubuntu-latest
 
     services:
@@ -38,6 +45,8 @@ jobs:
       JWT_SECRET: ci-test-secret-do-not-use-in-prod
       PORT: 5000
       CORS_ORIGIN: http://localhost:5173
+      # CI never calls real AI providers; use heuristic only
+      AI_PROVIDER: heuristic
 
     steps:
       - name: Checkout code
@@ -48,17 +57,24 @@ jobs:
         with:
           node-version: 22
           cache: 'npm'
-          cache-dependency-path: backend/package-lock.json
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
 
       - name: Install backend dependencies
         run: cd backend && npm ci
 
       - name: Wait for PostgreSQL
         run: |
-          until pg_isready -h localhost -p 5432 -U postgres; do
-            echo "Waiting for PostgreSQL..."
-            sleep 2
+          for i in $(seq 1 30); do
+            if pg_isready -h localhost -p 5432 -U postgres; then
+              echo "Postgres ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
           done
+          echo "::error::Postgres not ready after 30s"
+          exit 1
 
       - name: Run migrations
         run: cd backend && npm run migrate
@@ -72,5 +88,117 @@ jobs:
       - name: Install frontend dependencies
         run: cd frontend && npm ci
 
+      - name: Lint frontend
+        run: cd frontend && npm run lint -- --max-warnings 999 || echo "::warning::Frontend has lint warnings (non-blocking)"
+
       - name: Build frontend
         run: cd frontend && npm run build
+
+      - name: Upload backend coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/coverage
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload frontend build
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          retention-days: 7
+          if-no-files-found: warn
+
+  e2e-smoke:
+    name: E2E smoke (built stack)
+    runs-on: ubuntu-latest
+    needs: test
+
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: internops_smoke
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/internops_smoke
+      JWT_SECRET: smoke-test-secret
+      PORT: 5000
+      CORS_ORIGIN: http://localhost:5173
+      AI_PROVIDER: heuristic
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+      - name: Install backend
+        run: cd backend && npm ci --omit=dev
+      - name: Wait for Postgres
+        run: |
+          for i in $(seq 1 30); do
+            pg_isready -h localhost -p 5432 -U postgres && exit 0
+            sleep 1
+          done
+          exit 1
+      - name: Run migrations
+        run: cd backend && npm run migrate
+      - name: Start backend
+        run: |
+          cd backend
+          (node src/app.js > /tmp/backend.log 2>&1 &)
+          echo "$!" > /tmp/backend.pid
+      - name: Wait for /health
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:5000/health >/dev/null 2>&1; then
+              echo "Backend up after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::Backend never came up"
+          cat /tmp/backend.log
+          exit 1
+      - name: Hit endpoints
+        run: |
+          set -e
+          echo "== /health =="
+          curl -fsS http://localhost:5000/health
+          echo
+          echo "== /health/ready =="
+          curl -fsS http://localhost:5000/health/ready
+          echo
+          echo "== POST /api/auth/login (admin) =="
+          TOK=$(curl -fsS -H 'Content-Type: application/json' \
+            -d '{"email":"admin@internops.com","password":"Admin@123"}' \
+            http://localhost:5000/api/auth/login | python3 -c "import sys,json; print(json.load(sys.stdin).get('accessToken',''))")
+          test -n "$TOK" || { echo "::error::no access token"; exit 1; }
+          echo "Got JWT: ${TOK:0:32}..."
+          echo "== GET /api/users/me =="
+          curl -fsS -H "Authorization: Bearer $TOK" http://localhost:5000/api/users/me | head -c 200
+          echo
+      - name: Tail backend log on failure
+        if: failure()
+        run: cat /tmp/backend.log
+      - name: Stop backend
+        if: always()
+        run: |
+          if [ -f /tmp/backend.pid ]; then
+            kill "$(cat /tmp/backend.pid)" 2>/dev/null || true
+          fi
