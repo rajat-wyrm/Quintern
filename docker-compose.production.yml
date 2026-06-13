@@ -1,0 +1,161 @@
+# =============================================================================
+# InternOps · Production Docker Compose
+#
+# This is the canonical "ship it" stack:
+#   - postgres        (state, single primary, healthcheck)
+#   - redis           (sessions, rate-limit, cache; AOF persisted)
+#   - backend         (the Fastify API, 2+ workers, behind nginx)
+#   - frontend        (the Vite-built SPA, served by nginx)
+#
+# Secrets are loaded from .env.production (git-ignored). All services
+# are on the internal `app` network; only the frontend is exposed to
+# the host. To put TLS in front of the frontend, mount certs into
+# /etc/nginx/certs and uncomment the SSL block at the bottom of
+# frontend/Dockerfile.
+# =============================================================================
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: internops-postgres
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-internops}
+      POSTGRES_USER: ${POSTGRES_USER:-internops}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      # Belt-and-braces: a sensible default for the audit trail.
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=trust
+    secrets:
+      - postgres_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-internops} -d ${POSTGRES_DB:-internops}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - app
+
+  redis:
+    image: redis:7-alpine
+    container_name: internops-redis
+    restart: unless-stopped
+    logging: *default-logging
+    # AOF every second + RDB every 60s. Tolerates a 1s data loss window,
+    # which is the right tradeoff for sessions / rate-limit counters.
+    command: >
+      redis-server
+        --appendonly yes
+        --appendfsync everysec
+        --save 60 100
+        --maxmemory 256mb
+        --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - app
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: internops-backend
+    restart: unless-stopped
+    logging: *default-logging
+    env_file: .env.production
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-internops}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-internops}
+      REDIS_URL: redis://redis:6379
+      # Trust the nginx X-Forwarded-* headers so the request IP is the
+      # real client IP (not the docker bridge IP). Required for the
+      # brute-force middleware and rate limiter to work correctly.
+      TRUST_PROXY: "true"
+    secrets:
+      - postgres_password
+      - jwt_access_secret
+      - jwt_refresh_secret
+      - csrf_secret
+      - smtp_pass
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - app
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE: /api
+    container_name: internops-frontend
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      LISTEN_PORT: "80"
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - app
+
+networks:
+  app:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# =============================================================================
+# Secrets. Create the files in ./secrets/ on the host (see README). The
+# .gitignore already excludes this directory.
+# =============================================================================
+secrets:
+  postgres_password:
+    file: ./secrets/postgres_password.txt
+  jwt_access_secret:
+    file: ./secrets/jwt_access_secret.txt
+  jwt_refresh_secret:
+    file: ./secrets/jwt_refresh_secret.txt
+  csrf_secret:
+    file: ./secrets/csrf_secret.txt
+  smtp_pass:
+    file: ./secrets/smtp_pass.txt
