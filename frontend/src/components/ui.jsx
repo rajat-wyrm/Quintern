@@ -1527,7 +1527,7 @@ export function CommandPalette({
             <kbd className="font-mono">↵</kbd> open ·{' '}
             <kbd className="font-mono">esc</kbd> close
           </span>
-          <span className="text-fg-muted">Uptoskills</span>
+          <span className="text-fg-muted">Quintern</span>
         </div>
       </div>
     </div>

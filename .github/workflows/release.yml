@@ -97,7 +97,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
-          name: 'Uptoskills Workforce Platform ${{ steps.tag.outputs.tag }}'
+          name: 'Quintern Workforce Platform ${{ steps.tag.outputs.tag }}'
           generate_release_notes: true
           draft: false
           prerelease: ${{ contains(steps.tag.outputs.tag, '-rc') || contains(steps.tag.outputs.tag, '-beta') }}
@@ -106,7 +106,7 @@ jobs:
             release-artifacts/backend-${{ steps.tag.outputs.tag }}.tar.gz
             release-artifacts/docker-${{ steps.tag.outputs.tag }}.tar.gz
           body: |
-            ## Uptoskills Workforce Platform — ${{ steps.tag.outputs.tag }}
+            ## Quintern Workforce Platform — ${{ steps.tag.outputs.tag }}
 
             Auto-built from commit `${{ github.sha }}` on branch `${{ github.ref_name }}`.
 

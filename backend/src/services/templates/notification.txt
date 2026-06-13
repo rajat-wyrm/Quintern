@@ -1,7 +1,7 @@
-InternOps - {{title}}
+Quintern - {{title}}
 
 {{message}}
 
 {{#if actionUrl}}Follow this link: {{actionUrl}}{{/if}}
 
-InternOps - Internal Operations Platform
+Quintern - Internal Operations Platform

@@ -2,7 +2,7 @@
 # =============================================================================
 #  Quintern · Single-script infrastructure control
 #
-#  InternOps.sh is the single entry point used to install, run, test, and
+#  internops.sh is the single entry point used to install, run, test, and
 #  demo the entire Quintern stack. It wraps Docker Compose and adds the glue
 #  the Compose files don't: secrets bootstrap, migrations, seed, health checks,
 #  AI-provider diagnostics, test runners, and a pretty status output.

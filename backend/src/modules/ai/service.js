@@ -24,9 +24,9 @@ const pool = require('../../config/db');
 
 // ---- System prompt — concise, role-aware ----
 const SYSTEM_PROMPT = (role) =>
-  `You are the Uptoskills AI Assistant inside InternOps. The current user role is ${role}.
+  `You are the Quintern AI Assistant. The current user role is ${role}.
 
-InternOps is the operational platform for Uptoskills intern programs. Stack: Node.js/Fastify backend, React/Vite frontend, PostgreSQL, JWT auth, Argon2, Upstash Redis.
+ Quintern is a 5-tier cohort operations platform for intern programs. Stack: Node.js/Fastify backend, React/Vite frontend, PostgreSQL, JWT auth, Argon2, Upstash Redis.
 Modules: Attendance (PRESENT/ABSENT/LEAVE/EXAM_LEAVE/HALF_DAY/WFH), Ratings (1-10 scale, immutable), Projects (kanban/list/calendar, milestones, risks), Social Tasks + Proof Submissions, Meetings, Notifications, Reports, Audit Logs, AI Insights.
 
 Give concise, role-aware answers. Use markdown bullets. Keep under 150 words unless the topic needs more. Never reveal secrets, internal endpoints, or API keys. If the question is outside the platform's scope, say so and suggest the closest module.`.trim();
@@ -270,7 +270,7 @@ async function callHeuristic({ role, message, history = [] }) {
   const m = (message || '').toLowerCase().trim();
   let answer = '';
   if (/rate|score|1-10|rating/.test(m)) {
-    answer = `**Rating scale in InternOps:** Every rating is on a **1–10 scale** across seven categories (PERFORMANCE, TASK, PROJECT, INTERN, TEAM, MENTOR, REVIEW).\n\n- 8–10: Exceptional\n- 6–7: Solid / on target\n- 4–5: Needs work\n- 1–3: Concerning\n\nRatings are **immutable** — once submitted they form an audit-grade history. Use the **Ratings** page to give or view feedback.`;
+    answer = `**Rating scale in Quintern:** Every rating is on a **1–10 scale** across seven categories (PERFORMANCE, TASK, PROJECT, INTERN, TEAM, MENTOR, REVIEW).\n\n- 8–10: Exceptional\n- 6–7: Solid / on target\n- 4–5: Needs work\n- 1–3: Concerning\n\nRatings are **immutable** — once submitted they form an audit-grade history. Use the **Ratings** page to give or view feedback.`;
   } else if (/attendance|present|absent|wfh|half.?day/.test(m)) {
     answer = `**Attendance states supported:** PRESENT, ABSENT, LEAVE, EXAM_LEAVE, HALF_DAY, WFH.\n\nMark attendance from the **Attendance** page (single or bulk). Attendance is one of the inputs to the team health score on the dashboard.`;
   } else if (/project|kanban|task/.test(m)) {
@@ -278,7 +278,7 @@ async function callHeuristic({ role, message, history = [] }) {
   } else if (/team|people|member|who/.test(m)) {
     answer = `Use the **My Team** page (managers) or the **Admin → User Management** page (admins) to view and manage people. Roles: Admin, Senior TL, TL, Captain, Intern.`;
   } else if (/login|sign in|auth|password/.test(m)) {
-    answer = `**Sign in** at /login with your Uptoskills email and password. If you forgot it, click "Forgot password" on the sign-in screen. Sessions are JWT-based and use secure HTTP-only cookies for refresh tokens.`;
+    answer = `**Sign in** at /login with your Quintern email and password. If you forgot it, click "Forgot password" on the sign-in screen. Sessions are JWT-based and use secure HTTP-only cookies for refresh tokens.`;
   } else if (/audit|log|history|security/.test(m)) {
     answer = `The **Audit Log** (admins only) records every sensitive action — logins, attendance marks, ratings, project changes, password resets. It is append-only and immutable.`;
   } else if (/export|download|csv|report/.test(m)) {
@@ -298,7 +298,7 @@ async function callHeuristic({ role, message, history = [] }) {
       INTERN:
         'Try asking: "my attendance", "my ratings", or "how do I upload a proof".',
     };
-    answer = `Hi! I'm the Uptoskills AI assistant. I can help you navigate the platform, draft workflows, and answer product questions.\n\n${tips[role] || tips.INTERN}`;
+    answer = `Hi! I'm the Quintern AI assistant. I can help you navigate the platform, draft workflows, and answer product questions.\n\n${tips[role] || tips.INTERN}`;
   }
   return { text: answer, model: 'heuristic' };
 }

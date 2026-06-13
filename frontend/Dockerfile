@@ -1,5 +1,5 @@
 # =============================================================================
-# InternOps · Frontend image
+# Quintern · Frontend image
 # Multi-stage: install → build → nginx serve.
 # =============================================================================
 
@@ -21,12 +21,12 @@ RUN apk add --no-cache curl tini
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY <<'EOF' /etc/nginx/conf.d/default.conf
 # Rate limit zone shared across vhosts.
-limit_req_zone $binary_remote_addr zone=internops:10m rate=30r/s;
+limit_req_zone $binary_remote_addr zone=quintern:10m rate=30r/s;
 limit_req_status 429;
 
 # Upstream — points at the API container. In compose, the service name
 # is `backend`; in production it would be a real DNS or VIP.
-upstream internops_api {
+upstream quintern_api {
   server backend:5000;
   keepalive 32;
 }
@@ -61,7 +61,7 @@ server {
   # WebSocket + REST: pass-through to the API.
   location /api/ {
     limit_req zone=internops burst=60 nodelay;
-    proxy_pass http://internops_api;
+    proxy_pass http://quintern_api;
     proxy_http_version 1.1;
     proxy_set_header Host              $host;
     proxy_set_header X-Real-IP         $remote_addr;
@@ -72,15 +72,15 @@ server {
   }
   # /docs is the Swagger UI served by the backend at /docs.
   location /docs {
-    proxy_pass http://internops_api/docs;
+    proxy_pass http://quintern_api/docs;
     proxy_set_header Host $host;
   }
   location /docs/ {
-    proxy_pass http://internops_api/docs/;
+    proxy_pass http://quintern_api/docs/;
   }
   # /uploads (the avatar/proof file serving) is also proxied to the API.
   location /uploads/ {
-    proxy_pass http://internops_api;
+    proxy_pass http://quintern_api;
     proxy_set_header Host $host;
   }
 

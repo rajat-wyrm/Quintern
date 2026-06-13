@@ -439,7 +439,7 @@ export default function DashboardLayout({ children }) {
         {!collapsed && (
           <div className="min-w-0 flex-1">
             <div className="text-sm font-bold text-fg truncate leading-tight">
-              Uptoskills
+              Quintern
             </div>
             <div className="text-[10px] text-fg-muted truncate">
               Workforce operations

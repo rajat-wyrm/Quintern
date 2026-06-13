@@ -1,5 +1,5 @@
 # =============================================================================
-# InternOps · Backend image
+# Quintern · Backend image
 # Multi-stage build. Final image contains only the runtime deps, the
 # compiled app, and the package manifest. No devDependencies, no build
 # artifacts, no .git, no test fixtures.

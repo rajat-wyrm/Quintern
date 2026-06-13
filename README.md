@@ -69,7 +69,7 @@ It is a full suite for tracking attendance, performance ratings, social task ass
 
 Quintern is a production-grade workforce management platform designed to streamline intern operations within structured hierarchies. It provides a full suite of tools for attendance tracking, performance ratings, social task assignments, proof verification, team meetings, notifications, and comprehensive audit logging. The system enforces strict role-based access control with ownership validation, ensuring data integrity and security across all levels of the organization.
 
-Built with a modern Node.js/Fastify backend and a React/Vite frontend, Quintern follows enterprise design patterns such as repository abstraction, middleware-based authorization, and raw SQL queries for optimal database performance. The platform is ready for integration with the Uptoskills ecosystem, with dedicated placeholder modules for future synchronization.
+Built with a modern Node.js/Fastify backend and a React/Vite frontend, Quintern follows enterprise design patterns such as repository abstraction, middleware-based authorization, and raw SQL queries for optimal database performance. The platform is ready for integration with the Quintern ecosystem, with dedicated placeholder modules for future synchronization.
 
 ## Key Features
 
@@ -85,7 +85,7 @@ Built with a modern Node.js/Fastify backend and a React/Vite frontend, Quintern 
 - **Security** - JWT authentication, refresh token rotation, Argon2 hashing, CSRF, rate limiting, input sanitization, Helmet headers.
 - **RBAC + Ownership validation** - Every API request is validated for both role and hierarchical access.
 - **Database** - PostgreSQL with raw SQL (no ORM), UUIDs, foreign keys, indexes, soft deletes.
-- **Future integration** - Uptoskills placeholder modules ready for syncing users, attendance, projects.
+- **Future integration** - Quintern sync modules ready for syncing users, attendance, projects.
 
 ## System Architecture
 
@@ -228,7 +228,7 @@ All API endpoints are prefixed with `/api`. Interactive documentation is availab
 | Meetings      | `/api/meetings`      | CRUD, attendees management                                        |
 | Sessions      | `/api/sessions`      | List own sessions, revoke, admin revoke                           |
 | Reports       | `/api/reports`       | Attendance summary, ratings summary, task completion, CSV exports |
-| Uptoskills    | `/api/uptoskills`    | Sync status placeholder                                           |
+| Quintern Sync | `/api/quintern-sync` | External integration placeholder                                  |
 
 ## Major Modules
 
@@ -294,8 +294,8 @@ Copy `.env.example` to `.env` and fill in the required values. The following var
 | `UPSTASH_REDIS_REST_TOKEN` | Redis token (optional)                |
 | `CORS_ORIGIN`              | Allowed origin for CORS in production |
 | `EMAIL_API_KEY`            | Email service API key (optional)      |
-| `UPTOSKILLS_BASE_URL`      | Uptoskills API base URL (future)      |
-| `UPTOSKILLS_API_KEY`       | Uptoskills API key (future)           |
+| `QUINTERN_SYNC_BASE_URL`   | External sync API base URL (future)   |
+| `QUINTERN_SYNC_API_KEY`    | External sync API key (future)        |
 
 ## Installation
 
@@ -402,7 +402,7 @@ Interactive Swagger UI is available at `/docs` when the backend is running. The 
 
 ## Future Integrations
 
-The `modules/uptoskills` folder contains placeholder services for syncing users, departments, attendance, and projects with the Uptoskills ecosystem. Environment variables are already wired; developers need to implement the actual API calls.
+The `modules/quintern-sync` (placeholder) folder contains placeholder services for syncing users, departments, attendance, and projects with the Quintern ecosystem. Environment variables are already wired; developers need to implement the actual API calls.
 
 ## Production Checklist
 

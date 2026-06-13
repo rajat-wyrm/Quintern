@@ -182,7 +182,7 @@ const USERS = [
 
 const TASKS = [
   {
-    title: 'Share InternOps launch post on LinkedIn',
+    title: 'Share Quintern launch post on LinkedIn',
     description:
       'Post a thoughtful commentary with the launch link on your LinkedIn profile. Tag the company page.',
     target_platform: 'LinkedIn',
@@ -190,23 +190,23 @@ const TASKS = [
     daysFromNow: 4,
   },
   {
-    title: 'Star the InternOps GitHub repo + follow',
+    title: 'Star the Quintern GitHub repo + follow',
     description:
-      'Star the public InternOps repository on GitHub and submit a screenshot of the notifications tab.',
+      'Star the public Quintern repository on GitHub and submit a screenshot of the notifications tab.',
     target_platform: 'GitHub',
-    task_link: 'https://github.com/rajat-wyrm/InternOps',
+    task_link: 'https://github.com/rajat-wyrm/Quintern',
     daysFromNow: 3,
   },
   {
     title: 'Tweet about your week-1 learnings',
     description:
-      'Share a 280-character tweet on X/Twitter with the #InternOps hashtag.',
+      'Share a 280-character tweet on X/Twitter with the #Quintern hashtag.',
     target_platform: 'Twitter',
     task_link: '',
     daysFromNow: 2,
   },
   {
-    title: 'Publish a blog: My First Sprint at InternOps',
+    title: 'Publish a blog: My First Sprint at Quintern',
     description:
       'Write a 600+ word Medium article about your first sprint, embed at least one screenshot.',
     target_platform: 'Medium',
@@ -214,7 +214,7 @@ const TASKS = [
     daysFromNow: 9,
   },
   {
-    title: 'Instagram Reel: A day in the InternOps life',
+    title: 'Instagram Reel: A day in the Quintern life',
     description:
       '30-second reel showing your workspace and stack. Use the official audio.',
     target_platform: 'Instagram',
@@ -609,7 +609,7 @@ async function seedNotifications(client, userMap) {
       [
         userId,
         NOTIFICATION_TEMPLATES.TASK_ASSIGNED(
-          'Share InternOps launch post on LinkedIn'
+          'Share Quintern launch post on LinkedIn'
         ),
         Math.random() < 0.5,
         new Date(Date.now() - 4 * 86400000).toISOString(),
@@ -620,7 +620,7 @@ async function seedNotifications(client, userMap) {
       `INSERT INTO notifications (user_id, message, read, created_at) VALUES ($1,$2,$3,$4)`,
       [
         userId,
-        'Welcome to InternOps! Update your profile to get started.',
+        'Welcome to Quintern! Update your profile to get started.',
         true,
         new Date(Date.now() - 14 * 86400000).toISOString(),
       ]

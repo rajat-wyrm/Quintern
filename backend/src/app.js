@@ -64,7 +64,7 @@ app.register(require('@fastify/multipart'), {
 app.register(require('@fastify/swagger'), {
   openapi: {
     info: {
-      title: 'InternOps API',
+      title: 'Quintern API',
       version: '1.0.0',
     },
   },
@@ -162,7 +162,7 @@ app.get('/fallback', async (req, reply) => {
   reply.type('text/html').send(`
     <html>
       <body style="font-family:sans-serif;padding:2em">
-        <h1>InternOps API</h1>
+        <h1>Quintern API</h1>
         <a href="/docs">Swagger Docs</a>
       </body>
     </html>

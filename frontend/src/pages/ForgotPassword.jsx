@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import api from '../lib/axios';
 import { Button, Input, Banner } from '../components/ui';
 
-function UptoskillsMark({ size = 'md' }) {
+function QuinternMark({ size = 'md' }) {
   const dim = size === 'lg' ? 'w-10 h-10' : 'w-9 h-9';
   return (
     <svg viewBox="0 0 40 40" className={dim} aria-hidden="true">
@@ -54,13 +54,13 @@ export default function ForgotPassword() {
     <div className="min-h-screen flex items-center justify-center bg-surface-base mesh-gradient p-4">
       <div className="w-full max-w-md">
         <div className="flex items-center gap-2.5 mb-8 justify-center">
-          <UptoskillsMark size="lg" />
+          <QuinternMark size="lg" />
           <div>
             <div className="text-base font-bold text-fg tracking-tight">
-              Uptoskills
+              Quintern
             </div>
             <div className="text-[10px] text-fg-muted">
-              InternOps · Workforce Platform
+              Quintern · Workforce Platform
             </div>
           </div>
         </div>

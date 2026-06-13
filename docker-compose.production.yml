@@ -1,5 +1,5 @@
 # =============================================================================
-# InternOps · Production Docker Compose
+# Quintern · Production Docker Compose
 #
 # This is the canonical "ship it" stack:
 #   - postgres        (state, single primary, healthcheck)

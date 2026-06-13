@@ -179,7 +179,7 @@ class EmailService {
     const resetLink = `${process.env.APP_URL || 'http://localhost:5173'}/reset-password#token=${encodeURIComponent(resetToken)}`;
     return this.send({
       to: email,
-      subject: 'InternOps - Password Reset Request',
+      subject: 'Quintern - Password Reset Request',
       template: 'password-reset',
       data: { resetLink, email },
     });
@@ -189,7 +189,7 @@ class EmailService {
     const verifyLink = `${process.env.APP_URL || 'http://localhost:5173'}/verify-email?token=${verificationToken}`;
     return this.send({
       to: email,
-      subject: 'InternOps - Verify Your Email',
+      subject: 'Quintern - Verify Your Email',
       template: 'account-verification',
       data: { verifyLink, email },
     });
@@ -198,7 +198,7 @@ class EmailService {
   async sendNotification(email, { title, message, actionUrl, actionText }) {
     return this.send({
       to: email,
-      subject: `InternOps - ${title}`,
+      subject: `Quintern - ${title}`,
       template: 'notification',
       data: { title, message, actionUrl, actionText },
     });

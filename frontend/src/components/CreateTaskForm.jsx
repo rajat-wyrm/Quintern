@@ -72,7 +72,7 @@ export default function CreateTaskForm({ onCreated }) {
             required
             value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
-            placeholder="e.g. Share InternOps launch post"
+            placeholder="e.g. Share Quintern launch post"
           />
           <Textarea
             label="Description"

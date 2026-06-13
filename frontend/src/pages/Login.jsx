@@ -5,7 +5,7 @@ import api from '../lib/axios';
 import useAuthStore from '../store/auth';
 import { Button, Input, Checkbox, toast } from '../components/ui';
 
-// Uptoskills mark — the brand mark used everywhere in the app
+// Quintern mark — the brand mark used everywhere in the app
 function Mark({ size = 'md' }) {
   const dim =
     size === 'xl'
@@ -98,7 +98,7 @@ export default function Login() {
       toast({
         kind: 'success',
         title: `${greeting}, ${firstName}!`,
-        description: 'Signed in to Uptoskills.',
+        description: 'Signed in to Quintern.',
       });
       const to = new URLSearchParams(location.search).get('next') || '/';
       // Defer navigation so the toast + state flush commit first.
@@ -143,7 +143,7 @@ export default function Login() {
         <div className="relative z-10 flex items-center gap-2.5">
           <Mark size="lg" />
           <div>
-            <div className="text-base font-bold tracking-tight">Uptoskills</div>
+            <div className="text-base font-bold tracking-tight">Quintern</div>
             <div className="text-[11px] text-fg-inverse/60">
               Workforce operations
             </div>
@@ -155,8 +155,8 @@ export default function Login() {
             Run your intern programs with confidence.
           </h1>
           <p className="text-fg-inverse/70 text-sm leading-relaxed">
-            Uptoskills is the home of structured intern programs. Sign in to
-            plan cohorts, track attendance, and graduate world-class teams.
+            Quintern is the home of structured intern programs. Sign in to plan
+            cohorts, track attendance, and graduate world-class teams.
           </p>
           <ul className="space-y-2.5">
             {FEATURES.map((f) => (
@@ -183,7 +183,7 @@ export default function Login() {
         </div>
 
         <div className="relative z-10 flex items-center gap-3 text-xs text-fg-inverse/50">
-          <span>© {new Date().getFullYear()} Uptoskills</span>
+          <span>© {new Date().getFullYear()} Quintern</span>
           <span aria-hidden="true">·</span>
           <span>All systems operational</span>
           <span aria-hidden="true">·</span>
@@ -202,7 +202,7 @@ export default function Login() {
             <Mark size="lg" />
             <div className="text-left">
               <div className="text-base font-bold text-fg tracking-tight">
-                Uptoskills
+                Quintern
               </div>
               <div className="text-[10px] text-fg-muted">
                 Workforce operations
@@ -215,7 +215,7 @@ export default function Login() {
               Welcome back
             </h2>
             <p className="text-sm text-fg-muted mt-1.5">
-              Sign in to your Uptoskills workspace
+              Sign in to your Quintern workspace
             </p>
           </div>
 

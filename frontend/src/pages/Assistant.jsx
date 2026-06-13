@@ -24,7 +24,7 @@ const QUICK_ACTIONS = {
       icon: '👥',
       label: 'How do I add a new user?',
       prompt:
-        'Walk me through creating a new user in Uptoskills — what roles are available and what permissions does each have?',
+        'Walk me through creating a new user in Quintern — what roles are available and what permissions does each have?',
     },
     {
       icon: '📊',
@@ -137,7 +137,7 @@ const SUGGESTED_PROMPTS = [
     icon: '✨',
     label: 'What can you help me with?',
     prompt:
-      'Give me a 3-bullet overview of the most important things I can do in Uptoskills today.',
+      'Give me a 3-bullet overview of the most important things I can do in Quintern today.',
   },
   {
     icon: '📈',
@@ -148,8 +148,7 @@ const SUGGESTED_PROMPTS = [
   {
     icon: '💡',
     label: 'Productivity tips',
-    prompt:
-      'What are the top 3 productivity tips for interns using Uptoskills?',
+    prompt: 'What are the top 3 productivity tips for interns using Quintern?',
   },
 ];
 
@@ -428,7 +427,7 @@ export default function Assistant() {
             </div>
             <div className="min-w-0">
               <h2 className="text-sm font-semibold text-fg truncate">
-                Uptoskills AI
+                Quintern AI
               </h2>
               <p className="text-[11px] text-fg-muted truncate">
                 {role === 'INTERN'
