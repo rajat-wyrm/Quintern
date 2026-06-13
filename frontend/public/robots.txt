@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+
+# Block sensitive endpoints from crawlers.
+Disallow: /api/
+Disallow: /login
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /assistant
+
+Sitemap: /sitemap.xml
