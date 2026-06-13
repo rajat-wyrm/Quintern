@@ -123,3 +123,15 @@ postgres_data/
 InternOps/
 /tmp/
 tmp/
+
+# Dev debug scripts (NEVER commit)
+/backend/test-ai.js
+/backend/test-ai-new.js
+/_dbtest.js
+/_dbtest.cjs
+/fix_async.cjs
+/fix_async_done.js
+/fix_routes.cjs
+/_merge_routes.cjs
+/_migrate_runner.cjs
+/check_plugins.js
