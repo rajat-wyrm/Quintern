@@ -14,7 +14,7 @@ beforeAll(async () => {
     method: 'POST',
     url: '/api/auth/login',
     headers: { 'X-CSRF-Token': csrfToken, 'Content-Type': 'application/json' },
-    payload: { email: 'admin@internops.com', password: 'Admin@123' },
+    payload: { email: 'admin@quintern.com', password: 'Quintern@2026' },
   });
   accessToken = JSON.parse(loginRes.body).accessToken;
 });
@@ -117,7 +117,10 @@ describe('Meetings Integration Tests', () => {
       const res = await app.inject({
         method: 'DELETE',
         url: `/api/meetings/${meetingId}`,
-        headers: authHeaders(),
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'X-CSRF-Token': csrfToken,
+        },
       });
       expect(res.statusCode).toBe(200);
     });
@@ -126,7 +129,10 @@ describe('Meetings Integration Tests', () => {
       const res = await app.inject({
         method: 'GET',
         url: `/api/meetings/${meetingId}`,
-        headers: authHeaders(),
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'X-CSRF-Token': csrfToken,
+        },
       });
       expect(res.statusCode).toBe(404);
     });

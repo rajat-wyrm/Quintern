@@ -28,7 +28,7 @@ describe('Auth Integration Tests', () => {
           'X-CSRF-Token': csrfToken,
           'Content-Type': 'application/json',
         },
-        payload: { email: 'admin@internops.com', password: 'Admin@123' },
+        payload: { email: 'admin@quintern.com', password: 'Quintern@2026' },
       });
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.body);
@@ -46,7 +46,7 @@ describe('Auth Integration Tests', () => {
           'X-CSRF-Token': csrfToken,
           'Content-Type': 'application/json',
         },
-        payload: { email: 'admin@internops.com', password: 'wrong' },
+        payload: { email: 'admin@quintern.com', password: 'wrong' },
       });
       expect(res.statusCode).toBe(401);
     });
@@ -59,7 +59,7 @@ describe('Auth Integration Tests', () => {
           'X-CSRF-Token': csrfToken,
           'Content-Type': 'application/json',
         },
-        payload: { password: 'Admin@123' },
+        payload: { password: 'Quintern@2026' },
       });
       expect(res.statusCode).toBe(400);
     });
@@ -152,7 +152,7 @@ describe('Auth Integration Tests', () => {
       });
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.body);
-      expect(body.email).toBe('admin@internops.com');
+      expect(body.email).toBe('admin@quintern.com');
     });
 
     it('should reject request without token', async () => {
@@ -214,7 +214,7 @@ describe('Auth Integration Tests', () => {
           'X-CSRF-Token': csrfToken,
           'Content-Type': 'application/json',
         },
-        payload: { email: 'admin@internops.com' },
+        payload: { email: 'admin@quintern.com' },
       });
       expect(res.statusCode).toBe(200);
     });
