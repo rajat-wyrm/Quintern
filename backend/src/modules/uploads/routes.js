@@ -6,6 +6,7 @@ const auth = require('../../middleware/auth');
 const rbac = require('../../middleware/rbac');
 const pool = require('../../config/db');
 const config = require('../../config');
+const cloudinary = require('./cloudinary');
 
 // Allowed Content-Types. We don't trust this — the magic-bytes check below
 // is the real validator, since a Content-Type header is trivially spoofed.
@@ -67,18 +68,100 @@ async function routes(fastify) {
       });
     }
 
-    const fileName = `avatar_${req.user.id}_${crypto.randomBytes(8).toString('hex')}${ext}`;
-    const uploadPath = path.join(__dirname, '..', '..', '..', config.uploadDir);
-    await fsp.mkdir(uploadPath, { recursive: true });
-    await fsp.writeFile(path.join(uploadPath, fileName), buffer);
+    let url = null;
+    if (cloudinary.isConfigured()) {
+      try {
+        const result = await cloudinary.uploadBuffer(buffer, {
+          folder: `${config.cloudinary.folder}/avatars`,
+          publicId: `avatar_${req.user.id}_${crypto.randomBytes(8).toString('hex')}`,
+        });
+        url = result.url;
+      } catch (e) {
+        req.log.warn(
+          { err: e.message },
+          'cloudinary upload failed, falling back to local'
+        );
+      }
+    }
+    if (!url) {
+      const fileName = `avatar_${req.user.id}_${crypto.randomBytes(8).toString('hex')}${ext}`;
+      const uploadPath = path.join(
+        __dirname,
+        '..',
+        '..',
+        '..',
+        config.uploadDir
+      );
+      await fsp.mkdir(uploadPath, { recursive: true });
+      await fsp.writeFile(path.join(uploadPath, fileName), buffer);
+      url = `/api/uploads/file/${fileName}`;
+    }
 
-    const url = `/api/uploads/file/${fileName}`;
     await pool.query('UPDATE users SET avatar_url = $1 WHERE id = $2', [
       url,
       req.user.id,
     ]);
 
-    return { success: true, avatar_url: url };
+    return {
+      success: true,
+      avatar_url: url,
+      storage: cloudinary.isConfigured() ? 'cloudinary' : 'local',
+    };
+  });
+
+  // Generic file upload — admins only, for proof attachments / documents
+  fastify.post('/file', { preHandler: [auth] }, async (req, reply) => {
+    const data = await req.file();
+    if (!data) return reply.status(400).send({ error: 'No file uploaded' });
+    if (!ALLOWED_MIME.has(data.mimetype)) {
+      return reply.status(400).send({ error: 'Unsupported file type' });
+    }
+    const buffer = await data.toBuffer();
+    if (buffer.length > MAX_BYTES) {
+      return reply.status(413).send({ error: 'File too large' });
+    }
+    const ext = detectImageExt(buffer);
+    if (!ext) {
+      return reply.status(400).send({
+        error: 'File content does not match a supported image format',
+      });
+    }
+    let url = null;
+    let publicId = null;
+    if (cloudinary.isConfigured()) {
+      try {
+        const result = await cloudinary.uploadBuffer(buffer, {
+          folder: `${config.cloudinary.folder}/files`,
+          publicId: `file_${crypto.randomBytes(8).toString('hex')}`,
+        });
+        url = result.url;
+        publicId = result.public_id;
+      } catch (e) {
+        req.log.warn(
+          { err: e.message },
+          'cloudinary upload failed, falling back to local'
+        );
+      }
+    }
+    if (!url) {
+      const fileName = `file_${crypto.randomBytes(8).toString('hex')}${ext}`;
+      const uploadPath = path.join(
+        __dirname,
+        '..',
+        '..',
+        '..',
+        config.uploadDir
+      );
+      await fsp.mkdir(uploadPath, { recursive: true });
+      await fsp.writeFile(path.join(uploadPath, fileName), buffer);
+      url = `/api/uploads/file/${fileName}`;
+    }
+    return {
+      success: true,
+      url,
+      public_id: publicId,
+      storage: cloudinary.isConfigured() ? 'cloudinary' : 'local',
+    };
   });
 
   // Authenticated file download. Previously served publicly at /uploads/*,
