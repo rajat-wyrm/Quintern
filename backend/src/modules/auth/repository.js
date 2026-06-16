@@ -84,16 +84,25 @@ async function updateProfile(userId, fields) {
   );
 }
 
-// Redis integration fallback functions
+// Redis integration fallback functions. Redis is a *cache*, not the source
+// of truth — every call is wrapped in try/catch so a flaky / timed-out
+// Upstash REST call can never bubble up to a 5xx. On Redis failure we
+// silently fall through to the Postgres-backed implementation. The user
+// pays a small DB-query latency penalty; they never see a 500.
 const { getRedisClient } = require('../../config/redis');
 
 async function storeRefreshTokenRedis(userId, tokenHash, expiresAt) {
   const redis = await getRedisClient();
   if (redis) {
-    const ttl = Math.floor((expiresAt.getTime() - Date.now()) / 1000);
-    await redis.set(`refresh_token:${tokenHash}`, userId, { EX: ttl });
-    await redis.sAdd(`user_tokens:${userId}`, tokenHash);
-    return;
+    try {
+      const ttl = Math.floor((expiresAt.getTime() - Date.now()) / 1000);
+      await redis.set(`refresh_token:${tokenHash}`, userId, { EX: ttl });
+      await redis.sAdd(`user_tokens:${userId}`, tokenHash);
+      return;
+    } catch (e) {
+      // Redis is best-effort. Swallow + log; let the PG fallback run.
+      console.warn('[auth] redis store failed, falling back to PG:', e.message);
+    }
   }
   await storeRefreshToken(userId, tokenHash, expiresAt);
 }
@@ -102,8 +111,12 @@ async function getRefreshTokenRedis(tokenHash) {
   const redis = await getRedisClient();
 
   if (redis) {
-    const userId = await redis.get(`refresh_token:${tokenHash}`);
-    return userId ? { user_id: userId } : null;
+    try {
+      const userId = await redis.get(`refresh_token:${tokenHash}`);
+      return userId ? { user_id: userId } : null;
+    } catch (e) {
+      console.warn('[auth] redis get failed, falling back to PG:', e.message);
+    }
   }
 
   const res = await pool.query(
@@ -117,12 +130,16 @@ async function getRefreshTokenRedis(tokenHash) {
 async function revokeRefreshTokenRedis(tokenHash) {
   const redis = await getRedisClient();
   if (redis) {
-    const userId = await redis.get(`refresh_token:${tokenHash}`);
-    if (userId) {
-      await redis.del(`refresh_token:${tokenHash}`);
-      await redis.sRem(`user_tokens:${userId}`, tokenHash);
+    try {
+      const userId = await redis.get(`refresh_token:${tokenHash}`);
+      if (userId) {
+        await redis.del(`refresh_token:${tokenHash}`);
+        await redis.sRem(`user_tokens:${userId}`, tokenHash);
+      }
+      return;
+    } catch (e) {
+      console.warn('[auth] redis revoke failed, falling back to PG:', e.message);
     }
-    return;
   }
   await revokeRefreshToken(tokenHash);
 }
@@ -130,12 +147,19 @@ async function revokeRefreshTokenRedis(tokenHash) {
 async function revokeAllUserTokensRedis(userId) {
   const redis = await getRedisClient();
   if (redis) {
-    const tokens = await redis.sMembers(`user_tokens:${userId}`);
-    for (const token of tokens) {
-      await redis.del(`refresh_token:${token}`);
+    try {
+      const tokens = await redis.sMembers(`user_tokens:${userId}`);
+      for (const token of tokens) {
+        await redis.del(`refresh_token:${token}`);
+      }
+      await redis.del(`user_tokens:${userId}`);
+      return;
+    } catch (e) {
+      console.warn(
+        '[auth] redis revoke-all failed, falling back to PG:',
+        e.message
+      );
     }
-    await redis.del(`user_tokens:${userId}`);
-    return;
   }
   await revokeAllUserTokens(userId);
 }
