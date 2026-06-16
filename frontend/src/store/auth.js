@@ -15,7 +15,18 @@ const useAuthStore = create((set, get) => ({
   user: readUser(),
 
   setAuth: ({ accessToken, user }) => {
-    if (accessToken) localStorage.setItem('accessToken', accessToken);
+    if (accessToken) {
+      localStorage.setItem('accessToken', accessToken);
+      if (typeof window !== 'undefined') {
+        // Notify the realtime layer to (re)connect with the new token.
+        // Kept as a window event to avoid a circular import into the store.
+        window.dispatchEvent(
+          new CustomEvent('internops:auth', {
+            detail: { type: 'login', accessToken },
+          })
+        );
+      }
+    }
     if (user !== undefined) {
       if (user) localStorage.setItem('user', JSON.stringify(user));
       else localStorage.removeItem('user');

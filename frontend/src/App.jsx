@@ -6,6 +6,9 @@ import ResetPassword from './pages/ResetPassword';
 import NotFound from './pages/NotFound';
 import DashboardLayout from './components/DashboardLayout';
 import Spinner from './components/_Spinner';
+import SocketBridge from './components/SocketBridge';
+import { ToastContainer } from './lib/toast';
+import LiveBadge from './components/LiveBadge';
 import useAuthStore from './store/auth';
 
 // Lazy-load every dashboard page for route-level code splitting.
@@ -75,6 +78,11 @@ function Private({ children }) {
 function AppShell() {
   return (
     <DashboardLayout>
+      <SocketBridge />
+      <ToastContainer />
+      <div className="fixed right-4 top-16 z-30">
+        <LiveBadge />
+      </div>
       <Routes>
         <Route index element={<Home />} />
         <Route path="team" element={<Team />} />
