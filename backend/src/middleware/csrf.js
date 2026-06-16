@@ -49,6 +49,8 @@ const EXEMPT = [
   '/api/auth/forgot-password',
   '/api/auth/reset-password',
   '/api/auth/verify-email',
+  // Server-to-server webhooks use their own signature verification
+  '/api/stripe/webhook',
 ];
 
 function csrfProtection(request, reply, done) {
