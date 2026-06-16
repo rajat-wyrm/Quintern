@@ -14,6 +14,12 @@
 
 ---
 
+## Maintainer
+
+**Rajat Kumar** — Project Management, Uptoskills
+
+---
+
 ## Table of Contents
 
 1. [Executive Summary](#executive-summary)
