@@ -138,7 +138,10 @@ async function revokeRefreshTokenRedis(tokenHash) {
       }
       return;
     } catch (e) {
-      console.warn('[auth] redis revoke failed, falling back to PG:', e.message);
+      console.warn(
+        '[auth] redis revoke failed, falling back to PG:',
+        e.message
+      );
     }
   }
   await revokeRefreshToken(tokenHash);
