@@ -17,42 +17,44 @@ jobs:
     name: Notify #github-feed
     runs-on: ubuntu-latest
     steps:
-      - name: Build & send Discord embed
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const comment = context.payload.comment;
-            const pr = context.payload.pull_request;
-            const action = context.payload.action;
+      - name: Send Discord embed
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_FEED }}
+          ACTION: ${{ github.event.action }}
+          EVENT_PAYLOAD: ${{ toJSON(github.event) }}
+        run: |
+          set -euo pipefail
+          read -r BODY URL USER USER_ICON USER_URL PATH PR_NUMBER PR_TITLE < <(jq -r '
+            [(.comment.body // ""), .comment.html_url, .comment.user.login, .comment.user.avatar_url, .comment.user.html_url, .comment.path, (.pull_request.number|tostring), .pull_request.title] | @tsv
+          ' <<< "$EVENT_PAYLOAD")
 
-            const color = 0xf59e0b; // orange
-            const body = (comment.body || '').substring(0, 400) + ((comment.body || '').length > 400 ? '…' : '');
+          DESC="${BODY:0:400}"
+          if [ ${#BODY} -gt 400 ]; then DESC="${DESC}…"; fi
+          PR_TITLE_SHORT="${PR_TITLE:0:60}"
 
-            const embed = {
-              title: `💬 Review comment on PR #${pr.number}`,
-              url: comment.html_url,
-              color: color,
-              author: {
-                name: comment.user.login,
-                icon_url: comment.user.avatar_url,
-                url: comment.user.html_url
-              },
-              description: body,
+          EMBED=$(jq -n \
+            --arg title "💬 Review comment on PR #$PR_NUMBER" \
+            --arg url "$URL" \
+            --arg desc "$DESC" \
+            --arg author "$USER" \
+            --arg icon "$USER_ICON" \
+            --arg author_url "$USER_URL" \
+            --arg repo "$GITHUB_REPOSITORY" \
+            --arg path "\`$PATH\`" \
+            --arg pr_title "$PR_TITLE_SHORT" \
+            --arg footer "Quintern • github-feed • $(echo $ACTION | tr '[:lower:]' '[:upper:]')" \
+            '{
+              title: $title, url: $url, description: $desc, color: 16098892,
+              author: { name: $author, icon_url: $icon, url: $author_url },
               fields: [
-                { name: '📦 Repo', value: `${context.repo.owner}/${context.repo.repo}`, inline: true },
-                { name: '📄 File', value: `\`${comment.path}\``, inline: true },
-                { name: '📝 PR', value: pr.title.substring(0, 60), inline: false }
+                { name: "📦 Repo", value: $repo, inline: true },
+                { name: "📄 File", value: $path, inline: true },
+                { name: "📝 PR", value: $pr_title, inline: false }
               ],
-              footer: {
-                text: `Quintern • github-feed • ${action.toUpperCase()}`,
-                icon_url: 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png'
-              },
-              timestamp: new Date().toISOString()
-            };
-
-            const res = await fetch("${{ secrets.DISCORD_WEBHOOK_FEED }}", {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ username: 'Quintern Bot', embeds: [embed] })
-            });
-            if (!res.ok) core.setFailed(`Discord webhook failed: ${res.status} ${await res.text()}`);
+              footer: { text: $footer, icon_url: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" },
+              timestamp: (now | todate)
+            }')
+          PAYLOAD=$(jq -n --arg embed "$EMBED" '{username: "Quintern Bot", embeds: [$embed | fromjson]}')
+          HTTP=$(curl -sS -o /dev/null -w "%{http_code}" -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$DISCORD_WEBHOOK")
+          echo "Discord webhook returned: HTTP $HTTP"
+          if [ "$HTTP" != "204" ] && [ "$HTTP" != "200" ]; then exit 1; fi

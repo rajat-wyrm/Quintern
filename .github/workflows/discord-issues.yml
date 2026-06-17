@@ -17,48 +17,58 @@ jobs:
     name: Notify #github-feed
     runs-on: ubuntu-latest
     steps:
-      - name: Build & send Discord embed
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const issue = context.payload.issue;
-            const action = context.payload.action;
-            const closed = action === 'closed';
-            const opened = action === 'opened' || action === 'reopened';
+      - name: Send Discord embed
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_FEED }}
+          ACTION: ${{ github.event.action }}
+          EVENT_PAYLOAD: ${{ toJSON(github.event) }}
+        run: |
+          set -euo pipefail
+          read -r TITLE NUMBER BODY URL USER USER_ICON USER_URL < <(jq -r '
+            [.issue.title, (.issue.number|tostring), (.issue.body // ""), .issue.html_url, .issue.user.login, .issue.user.avatar_url, .issue.user.html_url] | @tsv
+          ' <<< "$EVENT_PAYLOAD")
 
-            const statusEmoji = closed ? '✅' : (opened ? '🆕' : '🏷️');
-            const statusLabel = closed ? 'CLOSED' : (opened ? 'OPENED' : action.toUpperCase());
+          LABELS=$(jq -r '[.issue.labels[].name] | map("`" + . + "`") | join(" ")' <<< "$EVENT_PAYLOAD")
+          if [ -z "$LABELS" ]; then LABELS="`none`"; fi
+          ASSIGNEES=$(jq -r '[.issue.assignees[].login] | map("@" + .) | join(" ")' <<< "$EVENT_PAYLOAD")
+          if [ -z "$ASSIGNEES" ]; then ASSIGNEES="`unassigned`"; fi
 
-            const color = closed ? 0x3b82f6 : 0x60a5fa; // blue family
-            const labels = (issue.labels || []).map(l => `\`${l.name}\``).join(' ') || '`none`';
-            const assignees = (issue.assignees || []).map(a => a.login).map(u => `@${u}`).join(' ') || '`unassigned`';
+          if [ "$ACTION" = "closed" ]; then
+            EMOJI="✅"; STATUS="CLOSED"; COLOR=3898326
+          elif [ "$ACTION" = "opened" ] || [ "$ACTION" = "reopened" ]; then
+            EMOJI="🆕"; STATUS="$(echo $ACTION | tr '[:lower:]' '[:upper:]')"; COLOR=6323599
+          else
+            EMOJI="🏷️"; STATUS="$(echo $ACTION | tr '[:lower:]' '[:upper:]')"; COLOR=6323599
+          fi
 
-            const embed = {
-              title: `${statusEmoji} [Issue] ${issue.title}`,
-              url: issue.html_url,
-              color: color,
-              author: {
-                name: issue.user.login,
-                icon_url: issue.user.avatar_url,
-                url: issue.user.html_url
-              },
-              description: (issue.body || '').substring(0, 300) + ((issue.body || '').length > 300 ? '…' : ''),
+          DESC="${BODY:0:300}"
+          if [ ${#BODY} -gt 300 ]; then DESC="${DESC}…"; fi
+
+          EMBED=$(jq -n \
+            --arg title "$EMOJI [Issue] $TITLE" \
+            --arg url "$URL" \
+            --arg desc "$DESC" \
+            --arg author "$USER" \
+            --arg icon "$USER_ICON" \
+            --arg author_url "$USER_URL" \
+            --arg repo "$GITHUB_REPOSITORY" \
+            --arg status "$STATUS" \
+            --arg labels "$LABELS" \
+            --arg assignees "$ASSIGNEES" \
+            --arg footer "Quintern • github-feed • #$NUMBER" \
+            '{
+              title: $title, url: $url, description: $desc, color: '$COLOR',
+              author: { name: $author, icon_url: $icon, url: $author_url },
               fields: [
-                { name: '📦 Repo', value: `${context.repo.owner}/${context.repo.repo}`, inline: true },
-                { name: '📊 Status', value: statusLabel, inline: true },
-                { name: '🏷️ Labels', value: labels, inline: false },
-                { name: '👥 Assignees', value: assignees, inline: false }
+                { name: "📦 Repo", value: $repo, inline: true },
+                { name: "📊 Status", value: $status, inline: true },
+                { name: "🏷️ Labels", value: $labels, inline: false },
+                { name: "👥 Assignees", value: $assignees, inline: false }
               ],
-              footer: {
-                text: `Quintern • github-feed • #${issue.number}`,
-                icon_url: 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png'
-              },
-              timestamp: new Date().toISOString()
-            };
-
-            const res = await fetch("${{ secrets.DISCORD_WEBHOOK_FEED }}", {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ username: 'Quintern Bot', embeds: [embed] })
-            });
-            if (!res.ok) core.setFailed(`Discord webhook failed: ${res.status} ${await res.text()}`);
+              footer: { text: $footer, icon_url: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" },
+              timestamp: (now | todate)
+            }')
+          PAYLOAD=$(jq -n --arg embed "$EMBED" '{username: "Quintern Bot", embeds: [$embed | fromjson]}')
+          HTTP=$(curl -sS -o /dev/null -w "%{http_code}" -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$DISCORD_WEBHOOK")
+          echo "Discord webhook returned: HTTP $HTTP"
+          if [ "$HTTP" != "204" ] && [ "$HTTP" != "200" ]; then exit 1; fi
