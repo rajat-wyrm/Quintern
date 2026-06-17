@@ -17,41 +17,48 @@ jobs:
     name: Notify #github-feed
     runs-on: ubuntu-latest
     steps:
-      - name: Build & send Discord embed
+      - name: Send Discord embed
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_FEED }}
           REF: ${{ github.ref }}
           REPO: ${{ github.repository }}
-          SENDER: ${{ github.event.sender.login }}
+          PUSHER: ${{ github.event.pusher.name }}
           SENDER_ICON: ${{ github.event.sender.avatar_url }}
           SENDER_URL: ${{ github.event.sender.html_url }}
           EVENT_PAYLOAD: ${{ toJSON(github.event) }}
         run: |
           set -euo pipefail
           BRANCH="${REF#refs/heads/}"
-          TOTAL=$(jq -r '.commits | length' <<< "$EVENT_PAYLOAD")
-          SHOWN=$(jq -r '.commits[0:3] | map("\(.id[0:7])\t\(.url)\t\(.message | split("\n")[0][0:80])\t\(.author.name)") | .[] | @tsv' <<< "$EVENT_PAYLOAD" | awk -F'\t' '{ printf "[`%s`](%s) %s — %s\n", $1, $2, $3, $4 }')
-          MORE=""
-          if [ "$TOTAL" -gt 3 ]; then MORE=$'\n…and **'"$((TOTAL-3))"'** more'; fi
+          TOTAL=$(jq '.commits | length' <<< "$EVENT_PAYLOAD")
           HEAD_URL=$(jq -r '.commits[-1].url // ""' <<< "$EVENT_PAYLOAD")
+          SHOWN=$(jq -r '
+            .commits[0:3] | map(
+              "[\u0060" + (.id[0:7]) + "\u0060](" + .url + ") " + (.message | split("\n")[0][0:80]) + " — " + .author.name
+            ) | join("\n")
+          ' <<< "$EVENT_PAYLOAD")
+          MORE=""
+          if [ "$TOTAL" -gt 3 ]; then
+            MORE=$(printf '\n…and **%d** more' $((TOTAL - 3)))
+          fi
+          DESC="${SHOWN}${MORE}"
 
           EMBED=$(jq -n \
-            --arg title "📥 Push to \`$BRANCH\`" \
-            --arg desc "${SHOWN}${MORE}" \
+            --arg title "📥 Push to ${BRANCH}" \
+            --arg desc "$DESC" \
             --arg url "$HEAD_URL" \
-            --arg author "$SENDER" \
+            --arg author "$PUSHER" \
             --arg icon "$SENDER_ICON" \
             --arg author_url "$SENDER_URL" \
             --arg repo "$REPO" \
-            --arg branch "`$BRANCH`" \
-            --arg total "$TOTAL" \
+            --arg branch "${BRANCH}" \
+            --argjson total "$TOTAL" \
             '{
               title: $title, url: $url, description: $desc, color: 10957793,
               author: { name: $author, icon_url: $icon, url: $author_url },
               fields: [
                 { name: "📦 Repo", value: $repo, inline: true },
                 { name: "🌿 Branch", value: $branch, inline: true },
-                { name: "🔢 Commits", value: $total, inline: true }
+                { name: "🔢 Commits", value: ($total | tostring), inline: true }
               ],
               footer: { text: "Quintern • github-feed", icon_url: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" },
               timestamp: (now | todate)
@@ -60,4 +67,3 @@ jobs:
           HTTP=$(curl -sS -o /dev/null -w "%{http_code}" -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$DISCORD_WEBHOOK")
           echo "Discord webhook returned: HTTP $HTTP"
           if [ "$HTTP" != "204" ] && [ "$HTTP" != "200" ]; then exit 1; fi
-
