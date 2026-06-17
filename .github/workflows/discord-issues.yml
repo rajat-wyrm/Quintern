@@ -24,7 +24,7 @@ jobs:
           EVENT_PAYLOAD: ${{ toJSON(github.event) }}
         run: |
           set -euo pipefail
-          read -r TITLE NUMBER BODY URL USER USER_ICON USER_URL < <(jq -r '
+          IFS=$'\t' read -r TITLE NUMBER BODY URL USER USER_ICON USER_URL < <(jq -r '
             [.issue.title, (.issue.number|tostring), (.issue.body // ""), .issue.html_url, .issue.user.login, .issue.user.avatar_url, .issue.user.html_url] | @tsv
           ' <<< "$EVENT_PAYLOAD")
 
