@@ -44,12 +44,14 @@ jobs:
                 end
               else {e:"📌", s:($ref_type | ascii_upcase), c:9128191}
               end;
+            def short_ref:
+              $ref | ltrimstr("refs/heads/") | ltrimstr("refs/tags/");
             (emoji_status) as $es |
             {
               username: "Quintern Bot",
               embeds: [{
-                title: "\($es.e) [\($ref_type | ascii_upcase)] \($ref)",
-                url: "https://github.com/\($repo)/tree/\($ref)",
+                title: "\($es.e) [\($ref_type | ascii_upcase)] \(short_ref)",
+                url: "https://github.com/\($repo)/tree/\(short_ref)",
                 color: $es.c,
                 author: {
                   name: $sender,
