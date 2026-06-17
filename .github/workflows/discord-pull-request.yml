@@ -19,8 +19,6 @@ jobs:
     steps:
       - name: Build & send Discord embed
         uses: actions/github-script@v7
-        env:
-          DISCORD_WEBHOOK_FEED: ${{ secrets.DISCORD_WEBHOOK_FEED }}
         with:
           script: |
             const pr = context.payload.pull_request;
@@ -58,7 +56,7 @@ jobs:
               timestamp: new Date().toISOString()
             };
 
-            const res = await fetch(process.env.DISCORD_WEBHOOK_FEED, {
+            const res = await fetch("${{ secrets.DISCORD_WEBHOOK_FEED }}", {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ username: 'Quintern Bot', embeds: [embed] })
