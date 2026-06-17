@@ -1,0 +1,74 @@
+name: Discord — Bug Reports (#bug-reports)
+
+on:
+  issues:
+    types: [opened, labeled]
+
+concurrency:
+  group: discord-bug-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: read
+
+jobs:
+  notify:
+    name: Notify #bug-reports
+    runs-on: ubuntu-latest
+    if: contains(github.event.issue.labels.*.name, 'bug')
+    steps:
+      - name: Send Discord embed
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_BUGS }}
+          REPO: ${{ github.repository }}
+          ACTION: ${{ github.event.action }}
+          EVENT_PAYLOAD: ${{ toJSON(github.event) }}
+        run: |
+          set -euo pipefail
+          PAYLOAD=$(jq -n \
+            --arg repo "$REPO" \
+            --arg action "$ACTION" \
+            --argjson event "$EVENT_PAYLOAD" \
+            '
+            def emoji_status:
+              if $action == "labeled" then {e:"🏷️", s:"LABELED", c:15158332}
+              else {e:"🐛", s:"BUG REPORTED", c:15158332}
+              end;
+            def short_body:
+              ($event.issue.body // "" |
+                if length == 0 then "no description"
+                elif length > 500 then .[0:500] + "…"
+                else .
+                end);
+            def labels_text:
+              ([$event.issue.labels[].name] | map("`" + . + "`") | join(" "));
+            def assignees_text:
+              ([$event.issue.assignees[].login] | map("@" + .) | join(" "));
+            (emoji_status) as $es |
+            {
+              username: "Quintern Bug Bot",
+              embeds: [{
+                title: "\($es.e) [Bug] #\($event.issue.number) \($event.issue.title)",
+                url: $event.issue.html_url,
+                color: $es.c,
+                author: {
+                  name: $event.issue.user.login,
+                  icon_url: $event.issue.user.avatar_url,
+                  url: $event.issue.user.html_url
+                },
+                fields: [
+                  { name: "📦 Repo", value: $repo, inline: true },
+                  { name: "📊 Status", value: $es.s, inline: true },
+                  { name: "🏷️ Labels", value: (if labels_text == "" then "`none`" else labels_text end), inline: false },
+                  { name: "👥 Assignees", value: (if assignees_text == "" then "`unassigned`" else assignees_text end), inline: false },
+                  { name: "📝 Description", value: short_body, inline: false }
+                ],
+                footer: { text: ("Quintern • bug-reports • #\($event.issue.number)"), icon_url: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" },
+                timestamp: (now | todate)
+              }]
+            }
+            ')
+          HTTP=$(curl -sS -o /dev/null -w "%{http_code}" -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$DISCORD_WEBHOOK")
+          echo "Discord webhook returned: HTTP $HTTP"
+          if [ "$HTTP" != "204" ] && [ "$HTTP" != "200" ]; then exit 1; fi

@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Send Discord embed
         env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_CICD }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_RELEASES }}
           REPO: ${{ github.repository }}
           EVENT_PAYLOAD: ${{ toJSON(github.event.release) }}
         run: |
@@ -28,14 +28,14 @@ jobs:
             --argjson release "$EVENT_PAYLOAD" \
             '
             def is_prerelease:
-              .prerelease // false;
+              $release.prerelease // false;
             def emoji_status:
               if is_prerelease then {e:"🚧", s:"PRE-RELEASE", c:9128191}
-              elif .draft == true then {e:"📝", s:"DRAFT", c:7039851}
+              elif $release.draft == true then {e:"📝", s:"DRAFT", c:7039851}
               else {e:"🚀", s:"RELEASED", c:11035093}
               end;
             def short_notes:
-              (.body // "" |
+              ($release.body // "" |
                 if length == 0 then "_no release notes_"
                 elif length > 1000 then .[0:1000] + "…"
                 else .
@@ -44,22 +44,22 @@ jobs:
             {
               username: "Quintern CI",
               embeds: [{
-                title: "\($es.e) [Release] \(.tag_name) — \(.name // "")",
-                url: .html_url,
+                title: "\($es.e) [Release] \($release.tag_name) — \($release.name // "")",
+                url: $release.html_url,
                 color: $es.c,
                 author: {
-                  name: (.author.login // "unknown"),
-                  icon_url: (.author.avatar_url // "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png"),
-                  url: (.author.html_url // "https://github.com")
+                  name: ($release.author.login // "unknown"),
+                  icon_url: ($release.author.avatar_url // "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png"),
+                  url: ($release.author.html_url // "https://github.com")
                 },
                 fields: [
                   { name: "📦 Repo", value: $repo, inline: true },
                   { name: "📊 Status", value: $es.s, inline: true },
-                  { name: "🏷️ Tag", value: ("`\(.tag_name)`"), inline: true },
+                  { name: "🏷️ Tag", value: ("`\($release.tag_name)`"), inline: true },
                   { name: "📝 Notes", value: short_notes, inline: false }
                 ],
-                footer: { text: ("Quintern • ci-cd • release #\(.id)"), icon_url: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" },
-                timestamp: (.published_at // now | todate)
+                footer: { text: ("Quintern • ci-cd • release #\($release.id)"), icon_url: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" },
+                timestamp: ($release.published_at // (now | todate))
               }]
             }
             ')
