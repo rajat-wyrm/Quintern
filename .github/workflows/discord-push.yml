@@ -64,3 +64,4 @@ jobs:
           HTTP=$(curl -sS -o /dev/null -w "%{http_code}" -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$DISCORD_WEBHOOK")
           echo "Discord webhook returned: HTTP $HTTP"
           if [ "$HTTP" != "204" ] && [ "$HTTP" != "200" ]; then exit 1; fi
+
