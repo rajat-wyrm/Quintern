@@ -19,42 +19,53 @@ jobs:
       - name: Send Discord embed
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_FEED }}
-          REF: ${{ github.event.ref }}
+          REPO: ${{ github.repository }}
           REF_TYPE: ${{ github.event.ref_type }}
-          EVENT_NAME: ${{ github.event_name }}
-          SENDER: ${{ github.event.sender.login }}
-          SENDER_ICON: ${{ github.event.sender.avatar_url }}
-          SENDER_URL: ${{ github.event.sender.html_url }}
+          REF: ${{ github.event.ref }}
+          SENDER: ${{ github.actor }}
+          EVENT_PAYLOAD: ${{ toJSON(github.event) }}
         run: |
           set -euo pipefail
-          if [ "$REF_TYPE" != "branch" ]; then
-            echo "Skipping non-branch event (ref_type=$REF_TYPE)"; exit 0
-          fi
-          if [ "$EVENT_NAME" = "delete" ]; then
-            EMOJI="🗑️"; STATUS="DELETED"; COLOR=7039851
-          else
-            EMOJI="🌱"; STATUS="CREATED"; COLOR=11141275
-          fi
-          EMBED=$(jq -n \
-            --arg title "$EMOJI Branch $STATUS: \`$REF\`" \
-            --arg author "$SENDER" \
-            --arg icon "$SENDER_ICON" \
-            --arg author_url "$SENDER_URL" \
-            --arg repo "$GITHUB_REPOSITORY" \
-            --arg branch "\`$REF\`" \
-            --arg status "$STATUS" \
-            '{
-              title: $title, color: '$COLOR',
-              author: { name: $author, icon_url: $icon, url: $author_url },
-              fields: [
-                { name: "📦 Repo", value: $repo, inline: true },
-                { name: "🌿 Branch", value: $branch, inline: true },
-                { name: "⚙️ Action", value: $status, inline: true }
-              ],
-              footer: { text: "Quintern • github-feed", icon_url: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" },
-              timestamp: (now | todate)
-            }')
-          PAYLOAD=$(jq -n --arg embed "$EMBED" '{username: "Quintern Bot", embeds: [$embed | fromjson]}')
+          PAYLOAD=$(jq -n \
+            --arg repo "$REPO" \
+            --arg ref_type "$REF_TYPE" \
+            --arg ref "$REF" \
+            --arg sender "$SENDER" \
+            --argjson event "$EVENT_PAYLOAD" \
+            '
+            def emoji_status:
+              if $ref_type == "branch" then
+                if $event.action == "deleted" then {e:"🗑️", s:"BRANCH DELETED", c:7039851}
+                else {e:"🌿", s:"BRANCH CREATED", c:3012387}
+                end
+              elif $ref_type == "tag" then
+                if $event.action == "deleted" then {e:"🗑️", s:"TAG DELETED", c:7039851}
+                else {e:"🏷️", s:"TAG CREATED", c:11035093}
+                end
+              else {e:"📌", s:($ref_type | ascii_upcase), c:9128191}
+              end;
+            (emoji_status) as $es |
+            {
+              username: "Quintern Bot",
+              embeds: [{
+                title: "\($es.e) [\($ref_type | ascii_upcase)] \($ref)",
+                url: "https://github.com/\($repo)/tree/\($ref)",
+                color: $es.c,
+                author: {
+                  name: $sender,
+                  icon_url: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
+                  url: "https://github.com/\($sender)"
+                },
+                fields: [
+                  { name: "📦 Repo", value: $repo, inline: true },
+                  { name: "📊 Status", value: $es.s, inline: true },
+                  { name: "🔗 Ref", value: ("`\($ref)`"), inline: true }
+                ],
+                footer: { text: "Quintern • github-feed", icon_url: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" },
+                timestamp: (now | todate)
+              }]
+            }
+            ')
           HTTP=$(curl -sS -o /dev/null -w "%{http_code}" -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$DISCORD_WEBHOOK")
           echo "Discord webhook returned: HTTP $HTTP"
           if [ "$HTTP" != "204" ] && [ "$HTTP" != "200" ]; then exit 1; fi

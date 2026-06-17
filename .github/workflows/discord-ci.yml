@@ -1,0 +1,78 @@
+name: Discord — CI Run Completion (#ci-cd)
+
+# Notifies #ci-cd when any CI workflow finishes. Filters to workflow_run
+# events so we don't recurse (this workflow isn't a CI run itself).
+# Triggers: format check, lint, tests, build — any check_* workflow.
+
+on:
+  workflow_run:
+    workflows: ["format", "ci"]
+    types: [completed]
+
+concurrency:
+  group: discord-cicd-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  notify:
+    name: Notify #ci-cd
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion != ''  # skip in-progress + skipped
+    steps:
+      - name: Send Discord embed
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_CICD }}
+          REPO: ${{ github.repository }}
+          EVENT_PAYLOAD: ${{ toJSON(github.event.workflow_run) }}
+        run: |
+          set -euo pipefail
+          PAYLOAD=$(jq -n \
+            --arg repo "$REPO" \
+            --argjson event "$EVENT_PAYLOAD" \
+            '
+            def emoji_status:
+              if $event.conclusion == "success" then {e:"✅", s:"PASSED", c:3012387}
+              elif $event.conclusion == "failure" then {e:"❌", s:"FAILED", c:15158332}
+              elif $event.conclusion == "cancelled" then {e:"🚫", s:"CANCELLED", c:7039851}
+              elif $event.conclusion == "timed_out" then {e:"⏱️", s:"TIMED OUT", c:15158332}
+              else {e:"⚠️", s:($event.conclusion | ascii_upcase), c:9128191}
+              end;
+            def short_name:
+              ($event.name // "" |
+                if length > 50 then .[0:50] + "…"
+                else .
+                end);
+            def owner_login: ($event.head_repository.owner.login // "");
+            def commit_short: ($event.head_sha[0:7] // "?");
+            (emoji_status) as $es |
+            {
+              username: "Quintern CI",
+              embeds: [{
+                title: "\($es.e) [CI] \(short_name)",
+                url: $event.html_url,
+                color: $es.c,
+                author: {
+                  name: (if owner_login == "" then "unknown" else owner_login end),
+                  icon_url: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
+                  url: ("https://github.com/" + owner_login)
+                },
+                fields: [
+                  { name: "📦 Repo", value: $repo, inline: true },
+                  { name: "📊 Status", value: $es.s, inline: true },
+                  { name: "🌿 Branch", value: ("`\($event.head_branch // "?")`"), inline: true },
+                  { name: "🔖 Commit", value: ("`\(commit_short)`"), inline: true },
+                  { name: "⏱️ Duration", value: (($event.run_duration_ms / 1000 | floor | tostring) + "s"), inline: true },
+                  { name: "🎯 Event", value: ($event.event // "?"), inline: true }
+                ],
+                footer: { text: ("Quintern • ci-cd • #\($event.id)"), icon_url: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" },
+                timestamp: (if $event.updated_at == null then now else ($event.updated_at | fromdate) end | todate)
+              }]
+            }
+            ')
+          HTTP=$(curl -sS -o /dev/null -w "%{http_code}" -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$DISCORD_WEBHOOK")
+          echo "Discord webhook returned: HTTP $HTTP"
+          if [ "$HTTP" != "204" ] && [ "$HTTP" != "200" ]; then exit 1; fi
