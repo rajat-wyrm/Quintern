@@ -1,1 +1,76 @@
+name: Discord — Push Events (#github-feed)
 
+on:
+  push:
+    branches-ignore:
+      - 'dependabot/**'
+
+concurrency:
+  group: discord-push-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    name: Notify #github-feed
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Discord embed
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_FEED }}
+          REF: ${{ github.ref }}
+          REPO: ${{ github.repository }}
+          PUSHER: ${{ github.event.pusher.name }}
+          SENDER_ICON: ${{ github.event.sender.avatar_url }}
+          SENDER_URL: ${{ github.event.sender.html_url }}
+          EVENT_PAYLOAD: ${{ toJSON(github.event) }}
+        run: |
+          set -euo pipefail
+          BRANCH="${REF#refs/heads/}"
+          # Build commit lines in bash so we never fight jq's escape rules.
+          mapfile -t LINES < <(jq -r '
+            .commits[0:3] | to_entries[] |
+            "\(.value.id[0:7])\t\(.value.url)\t\(.value.message | split("\n")[0][0:80])\t\(.value.author.name)"
+          ' <<< "$EVENT_PAYLOAD")
+          SHOWN=""
+          for line in "${LINES[@]:-}"; do
+            [ -z "$line" ] && continue
+            IFS=$'\t' read -r CID CURL CMSG CAUTH <<< "$line"
+            SHOWN+="[\`${CID}\`](${CURL}) ${CMSG} — ${CAUTH}"$'\n'
+          done
+          SHOWN="${SHOWN%$'\n'}"
+          TOTAL=$(jq '.commits | length' <<< "$EVENT_PAYLOAD")
+          MORE=""
+          if [ "$TOTAL" -gt 3 ]; then
+            MORE=$(printf '\n…and **%d** more' "$((TOTAL - 3))")
+          fi
+          DESC="${SHOWN}${MORE}"
+          HEAD_URL=$(jq -r '.commits[-1].url // ""' <<< "$EVENT_PAYLOAD")
+
+          EMBED=$(jq -n \
+            --arg title "📥 Push to \`${BRANCH}\`" \
+            --arg desc "$DESC" \
+            --arg url "$HEAD_URL" \
+            --arg author "$PUSHER" \
+            --arg icon "$SENDER_ICON" \
+            --arg author_url "$SENDER_URL" \
+            --arg repo "$REPO" \
+            --arg branch "\`${BRANCH}\`" \
+            --argjson total "$TOTAL" \
+            '{
+              title: $title, url: $url, description: $desc, color: 10957793,
+              author: { name: $author, icon_url: $icon, url: $author_url },
+              fields: [
+                { name: "📦 Repo", value: $repo, inline: true },
+                { name: "🌿 Branch", value: $branch, inline: true },
+                { name: "🔢 Commits", value: ($total | tostring), inline: true }
+              ],
+              footer: { text: "Quintern • github-feed", icon_url: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" },
+              timestamp: (now | todate)
+            }')
+          PAYLOAD=$(jq -n --arg embed "$EMBED" '{username: "Quintern Bot", embeds: [$embed | fromjson]}')
+          HTTP=$(curl -sS -o /dev/null -w "%{http_code}" -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$DISCORD_WEBHOOK")
+          echo "Discord webhook returned: HTTP $HTTP"
+          if [ "$HTTP" != "204" ] && [ "$HTTP" != "200" ]; then exit 1; fi
