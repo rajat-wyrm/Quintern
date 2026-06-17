@@ -29,28 +29,35 @@ jobs:
         run: |
           set -euo pipefail
           BRANCH="${REF#refs/heads/}"
-          TOTAL=$(jq '.commits | length' <<< "$EVENT_PAYLOAD")
-          HEAD_URL=$(jq -r '.commits[-1].url // ""' <<< "$EVENT_PAYLOAD")
-          SHOWN=$(jq -r '
-            .commits[0:3] | map(
-              "[\u0060" + (.id[0:7]) + "\u0060](" + .url + ") " + (.message | split("\n")[0][0:80]) + " — " + .author.name
-            ) | join("\n")
+          # Build commit lines in bash so we never fight jq's escape rules.
+          mapfile -t LINES < <(jq -r '
+            .commits[0:3] | to_entries[] |
+            "\(.value.id[0:7])\t\(.value.url)\t\(.value.message | split("\n")[0][0:80])\t\(.value.author.name)"
           ' <<< "$EVENT_PAYLOAD")
+          SHOWN=""
+          for line in "${LINES[@]:-}"; do
+            [ -z "$line" ] && continue
+            IFS=$'\t' read -r CID CURL CMSG CAUTH <<< "$line"
+            SHOWN+="[\`${CID}\`](${CURL}) ${CMSG} — ${CAUTH}"$'\n'
+          done
+          SHOWN="${SHOWN%$'\n'}"
+          TOTAL=$(jq '.commits | length' <<< "$EVENT_PAYLOAD")
           MORE=""
           if [ "$TOTAL" -gt 3 ]; then
-            MORE=$(printf '\n…and **%d** more' $((TOTAL - 3)))
+            MORE=$(printf '\n…and **%d** more' "$((TOTAL - 3))")
           fi
           DESC="${SHOWN}${MORE}"
+          HEAD_URL=$(jq -r '.commits[-1].url // ""' <<< "$EVENT_PAYLOAD")
 
           EMBED=$(jq -n \
-            --arg title "📥 Push to ${BRANCH}" \
+            --arg title "📥 Push to \`${BRANCH}\`" \
             --arg desc "$DESC" \
             --arg url "$HEAD_URL" \
             --arg author "$PUSHER" \
             --arg icon "$SENDER_ICON" \
             --arg author_url "$SENDER_URL" \
             --arg repo "$REPO" \
-            --arg branch "${BRANCH}" \
+            --arg branch "\`${BRANCH}\`" \
             --argjson total "$TOTAL" \
             '{
               title: $title, url: $url, description: $desc, color: 10957793,
