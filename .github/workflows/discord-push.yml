@@ -17,51 +17,45 @@ jobs:
     name: Notify #github-feed
     runs-on: ubuntu-latest
     steps:
-      - name: Send Discord embed
+      - name: Build & send Discord embed
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_FEED }}
           REF: ${{ github.ref }}
           REPO: ${{ github.repository }}
-          PUSHER: ${{ github.event.pusher.name }}
-          HEAD_URL: ${{ github.event.head_commit.url }}
+          SENDER: ${{ github.event.sender.login }}
+          SENDER_ICON: ${{ github.event.sender.avatar_url }}
+          SENDER_URL: ${{ github.event.sender.html_url }}
           EVENT_PAYLOAD: ${{ toJSON(github.event) }}
         run: |
           set -euo pipefail
           BRANCH="${REF#refs/heads/}"
-          COUNT=$(jq '.commits | length' <<< "$EVENT_PAYLOAD")
+          TOTAL=$(jq -r '.commits | length' <<< "$EVENT_PAYLOAD")
           SHOWN=$(jq -r '
-            [.commits[0:3][] |
-              "[\`" + (.id[0:7]) + "\`](" + .url + ") " + ((.message | split("\n")[0])[0:80]) + " — " + .author.name
-            ] | join("\n")
+            .commits[0:3] | map(
+              "[\`" + (.id[0:7]) + "\`](" + .url + ") " + (.message | split("\n")[0][0:80]) + " — " + .author.name
+            ) | join("\n")
           ' <<< "$EVENT_PAYLOAD")
           MORE=""
-          if [ "$COUNT" -gt 3 ]; then
-            MORE=$(printf '\n…and **%d** more' $((COUNT - 3)))
-          fi
-          DESC="${SHOWN}${MORE}"
-          HEAD_URL_VAL="$HEAD_URL"
-          if [ -z "$HEAD_URL_VAL" ] || [ "$HEAD_URL_VAL" = "null" ]; then
-            HEAD_URL_VAL=""
-          fi
-          ICON="https://github.com/${PUSHER}.png?size=64"
-          AUTHOR_URL="https://github.com/${PUSHER}"
+          if [ "$TOTAL" -gt 3 ]; then MORE=$'\n…and **'"$((TOTAL-3))"'** more'; fi
+          HEAD_URL=$(jq -r '.commits[-1].url // ""' <<< "$EVENT_PAYLOAD")
+
           EMBED=$(jq -n \
-            --arg title "📥 Push to \`${BRANCH}\`" \
-            --arg desc "$DESC" \
-            --arg author "$PUSHER" \
-            --arg icon "$ICON" \
-            --arg author_url "$AUTHOR_URL" \
-            --arg url "$HEAD_URL_VAL" \
+            --arg title "📥 Push to \`$BRANCH\`" \
+            --arg desc "${SHOWN}${MORE}" \
+            --arg url "$HEAD_URL" \
+            --arg author "$SENDER" \
+            --arg icon "$SENDER_ICON" \
+            --arg author_url "$SENDER_URL" \
             --arg repo "$REPO" \
-            --arg branch "`${BRANCH}`" \
-            --argjson count "$COUNT" \
+            --arg branch "\`$BRANCH\`" \
+            --arg total "$TOTAL" \
             '{
-              title: $title, url: $url, description: $desc, color: 10947121,
+              title: $title, url: $url, description: $desc, color: 10957793,
               author: { name: $author, icon_url: $icon, url: $author_url },
               fields: [
                 { name: "📦 Repo", value: $repo, inline: true },
                 { name: "🌿 Branch", value: $branch, inline: true },
-                { name: "🔢 Commits", value: ($count | tostring), inline: true }
+                { name: "🔢 Commits", value: $total, inline: true }
               ],
               footer: { text: "Quintern • github-feed", icon_url: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" },
               timestamp: (now | todate)
