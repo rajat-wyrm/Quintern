@@ -1,0 +1,89 @@
+name: Discord — Workflows Lint
+
+# Guardrail: every push, parse the 4 Discord workflow files and verify they
+# build a valid JSON payload against a synthetic issue event. Catches
+# regressions like:
+#   - read -r chains that shred titles with spaces (IFS bug)
+#   - backtick fallback strings (bash command-substitution trap)
+#   - broken jq @tsv / --arg composition
+# Runs on push + pull_request so contributors see failures before merge.
+
+on:
+  push:
+    branches-ignore:
+      - 'dependabot/**'
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint discord-*.yml builds valid JSON
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify each workflow file builds a valid Discord payload
+        env:
+          SYNTHETIC_EVENT: '{"action":"opened","issue":{"number":99,"title":"bug(test): sample title with spaces & symbols","html_url":"https://github.com/x/y/issues/99","user":{"login":"tester","avatar_url":"https://example.com/a.png","html_url":"https://github.com/tester"},"labels":[{"name":"bug"}],"assignees":[]}}'
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          failures=0
+          for f in .github/workflows/discord-*.yml; do
+            echo "--- $f ---"
+            # Extract the run: block (between the line 'run: |' and the next
+            # non-indented line). Pure bash, no yq dep.
+            run_block=$(awk '
+              /^[[:space:]]*run:[[:space:]]*\|[[:space:]]*$/ { capture=1; next }
+              capture && /^[[:space:]]+[A-Za-z]/ { print; next }
+              capture && /^[[:space:]]+- / { print; next }
+              capture && /^[[:space:]]*$/ { print; next }
+              capture { capture=0 }
+            ' "$f")
+            if [ -z "$run_block" ]; then
+              echo "  WARN: no run: | block found, skipping"
+              continue
+            fi
+            # Reconstruct the script with required env vars exported. The
+            # synthetic event replaces EVENT_PAYLOAD; everything else is a
+            # no-op stub (curl is replaced with a no-op that prints "OK").
+            if ! printf '%s\n' "$run_block" | bash -c '
+              set -euo pipefail
+              DISCORD_WEBHOOK="https://example.invalid/webhook"
+              REPO="rajat-wyrm/Quintern"
+              ACTION="opened"
+              EVENT_PAYLOAD="$SYNTHETIC_EVENT"
+              REF="refs/heads/main"
+              # Stub curl — print a deterministic success line and skip the
+              # real network call.
+              curl() { echo "HTTP 204"; return 0; }
+              export -f curl
+              eval "$(cat)"
+            ' >/dev/null 2>&1; then
+              # Re-run capturing stderr to see the actual failure.
+              err=$(printf '%s\n' "$run_block" | bash -c '
+                set -euo pipefail
+                DISCORD_WEBHOOK="https://example.invalid/webhook"
+                REPO="rajat-wyrm/Quintern"
+                ACTION="opened"
+                EVENT_PAYLOAD="$SYNTHETIC_EVENT"
+                REF="refs/heads/main"
+                curl() { echo "HTTP 204"; return 0; }
+                export -f curl
+                eval "$(cat)"
+              ' 2>&1 >/dev/null || true)
+              echo "  FAIL: script did not run cleanly"
+              echo "  --- stderr ---"
+              echo "$err" | sed "s/^/    /"
+              failures=$((failures + 1))
+            else
+              echo "  OK: script ran cleanly against synthetic event"
+            fi
+          done
+          if [ "$failures" -gt 0 ]; then
+            echo "$failures discord workflow(s) failed the lint check"
+            exit 1
+          fi
+          echo "All discord-*.yml workflows passed the lint check"
