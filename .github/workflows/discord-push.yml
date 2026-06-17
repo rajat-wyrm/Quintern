@@ -34,6 +34,12 @@ jobs:
             --arg pusher "$PUSHER" \
             --argjson event "$EVENT_PAYLOAD" \
             '
+            def short_ref:
+              $ref | ltrimstr("refs/heads/") | ltrimstr("refs/tags/");
+            def ref_url:
+              if $ref_type == "tag" then "https://github.com/\($repo)/releases/tag/\(short_ref)"
+              else "https://github.com/\($repo)/tree/\(short_ref)"
+              end;
             def emoji_status:
               if $ref_type == "tag" then {e:"🏷️", s:"TAG PUSHED", c:11035093}
               elif $ref_type == "branch" then {e:"📥", s:"PUSH", c:9128191}
@@ -50,8 +56,8 @@ jobs:
             {
               username: "Quintern Bot",
               embeds: [{
-                title: "\($es.e) [Push] \($ref)",
-                url: "https://github.com/\($repo)/commits/\($ref)",
+                title: "\($es.e) [Push] \(short_ref)",
+                url: ref_url,
                 color: $es.c,
                 author: {
                   name: $pusher,
