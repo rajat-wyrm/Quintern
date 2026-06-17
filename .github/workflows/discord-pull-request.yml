@@ -50,7 +50,7 @@ jobs:
             {
               username: "Quintern Bot",
               embeds: [{
-                title: "\($es.e) [PR] #\(.pull_request.number) \(.pull_request.title)",
+                title: "\($es.e) [PR] #\($event.pull_request.number) \($event.pull_request.title)",
                 url: $event.pull_request.html_url,
                 color: $es.c,
                 author: {
@@ -61,10 +61,10 @@ jobs:
                 fields: [
                   { name: "📦 Repo", value: $repo, inline: true },
                   { name: "📊 Status", value: $es.s, inline: true },
-                  { name: "🔀 Branch", value: "`\(.pull_request.head.ref)` → `\(.pull_request.base.ref)`", inline: true },
-                  { name: "🧾 Commits", value: (.pull_request.commits | tostring), inline: true },
-                  { name: "➕ Additions", value: ("+" + (.pull_request.additions | tostring)), inline: true },
-                  { name: "➖ Deletions", value: ("-" + (.pull_request.deletions | tostring)), inline: true },
+                  { name: "🔀 Branch", value: "`\($event.pull_request.head.ref)` → `\($event.pull_request.base.ref)`", inline: true },
+                  { name: "🧾 Commits", value: ($event.pull_request.commits | tostring), inline: true },
+                  { name: "➕ Additions", value: ("+" + ($event.pull_request.additions | tostring)), inline: true },
+                  { name: "➖ Deletions", value: ("-" + ($event.pull_request.deletions | tostring)), inline: true },
                   { name: "📝 Description", value: short_desc, inline: false }
                 ],
                 footer: { text: ("Quintern • github-feed • #\($event.pull_request.number)"), icon_url: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" },
