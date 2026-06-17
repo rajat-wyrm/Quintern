@@ -30,11 +30,7 @@ jobs:
           set -euo pipefail
           BRANCH="${REF#refs/heads/}"
           TOTAL=$(jq -r '.commits | length' <<< "$EVENT_PAYLOAD")
-          SHOWN=$(jq -r '
-            .commits[0:3] | map(
-              "[\`" + (.id[0:7]) + "\`](" + .url + ") " + (.message | split("\n")[0][0:80]) + " — " + .author.name
-            ) | join("\n")
-          ' <<< "$EVENT_PAYLOAD")
+          SHOWN=$(jq -r '.commits[0:3] | map("\(.id[0:7])\t\(.url)\t\(.message | split("\n")[0][0:80])\t\(.author.name)") | .[] | @tsv' <<< "$EVENT_PAYLOAD" | awk -F'\t' '{ printf "[`%s`](%s) %s — %s\n", $1, $2, $3, $4 }')
           MORE=""
           if [ "$TOTAL" -gt 3 ]; then MORE=$'\n…and **'"$((TOTAL-3))"'** more'; fi
           HEAD_URL=$(jq -r '.commits[-1].url // ""' <<< "$EVENT_PAYLOAD")
@@ -47,7 +43,7 @@ jobs:
             --arg icon "$SENDER_ICON" \
             --arg author_url "$SENDER_URL" \
             --arg repo "$REPO" \
-            --arg branch "\`$BRANCH\`" \
+            --arg branch "`$BRANCH`" \
             --arg total "$TOTAL" \
             '{
               title: $title, url: $url, description: $desc, color: 10957793,
