@@ -24,37 +24,44 @@ jobs:
           EVENT_PAYLOAD: ${{ toJSON(github.event) }}
         run: |
           set -euo pipefail
-          IFS=$'\t' read -r BODY URL USER USER_ICON USER_URL PATH PR_NUMBER PR_TITLE < <(jq -r '
-            [(.comment.body // ""), .comment.html_url, .comment.user.login, .comment.user.avatar_url, .comment.user.html_url, .comment.path, (.pull_request.number|tostring), .pull_request.title] | @tsv
-          ' <<< "$EVENT_PAYLOAD")
-
-          DESC="${BODY:0:400}"
-          if [ ${#BODY} -gt 400 ]; then DESC="${DESC}…"; fi
-          PR_TITLE_SHORT="${PR_TITLE:0:60}"
-
-          EMBED=$(jq -n \
-            --arg title "💬 Review comment on PR #$PR_NUMBER" \
-            --arg url "$URL" \
-            --arg desc "$DESC" \
-            --arg author "$USER" \
-            --arg icon "$USER_ICON" \
-            --arg author_url "$USER_URL" \
-            --arg repo "$GITHUB_REPOSITORY" \
-            --arg path "\`$PATH\`" \
-            --arg pr_title "$PR_TITLE_SHORT" \
-            --arg footer "Quintern • github-feed • $(echo $ACTION | tr '[:lower:]' '[:upper:]')" \
-            '{
-              title: $title, url: $url, description: $desc, color: 16098892,
-              author: { name: $author, icon_url: $icon, url: $author_url },
-              fields: [
-                { name: "📦 Repo", value: $repo, inline: true },
-                { name: "📄 File", value: $path, inline: true },
-                { name: "📝 PR", value: $pr_title, inline: false }
-              ],
-              footer: { text: $footer, icon_url: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" },
-              timestamp: (now | todate)
-            }')
-          PAYLOAD=$(jq -n --arg embed "$EMBED" '{username: "Quintern Bot", embeds: [$embed | fromjson]}')
+          PAYLOAD=$(jq -n \
+            --arg repo "${GITHUB_REPOSITORY:-}" \
+            --arg action "$ACTION" \
+            --argjson event "$EVENT_PAYLOAD" \
+            '
+            def short_body:
+              ($event.comment.body // "" |
+                if length == 0 then "no comment text"
+                elif length > 400 then .[0:400] + "…"
+                else .
+                end);
+            def short_pr_title:
+              ($event.pull_request.title // "" |
+                if length > 60 then .[0:60]
+                else .
+                end);
+            {
+              username: "Quintern Bot",
+              embeds: [{
+                title: ("💬 Review comment on PR #\($event.pull_request.number)"),
+                url: $event.comment.html_url,
+                color: 16098892,
+                author: {
+                  name: $event.comment.user.login,
+                  icon_url: $event.comment.user.avatar_url,
+                  url: $event.comment.user.html_url
+                },
+                fields: [
+                  { name: "📦 Repo", value: $repo, inline: true },
+                  { name: "📄 File", value: ("`\($event.comment.path)`"), inline: true },
+                  { name: "📝 PR", value: short_pr_title, inline: false },
+                  { name: "💬 Comment", value: short_body, inline: false }
+                ],
+                footer: { text: ("Quintern • github-feed • " + ($action | ascii_upcase)), icon_url: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" },
+                timestamp: (now | todate)
+              }]
+            }
+            ')
           HTTP=$(curl -sS -o /dev/null -w "%{http_code}" -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$DISCORD_WEBHOOK")
           echo "Discord webhook returned: HTTP $HTTP"
           if [ "$HTTP" != "204" ] && [ "$HTTP" != "200" ]; then exit 1; fi

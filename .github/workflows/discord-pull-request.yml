@@ -20,57 +20,58 @@ jobs:
       - name: Send Discord embed
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_FEED }}
+          REPO: ${{ github.repository }}
           ACTION: ${{ github.event.action }}
           MERGED: ${{ github.event.pull_request.merged }}
           EVENT_PAYLOAD: ${{ toJSON(github.event) }}
         run: |
           set -euo pipefail
-          IFS=$'\t' read -r TITLE NUMBER BODY URL USER USER_ICON USER_URL HEAD BASE COMMITS ADDITIONS DELETIONS < <(jq -r '
-            [.pull_request.title, (.pull_request.number|tostring), (.pull_request.body // ""), .pull_request.html_url, .pull_request.user.login, .pull_request.user.avatar_url, .pull_request.user.html_url, .pull_request.head.ref, .pull_request.base.ref, (.pull_request.commits|tostring), ("+" + (.pull_request.additions|tostring)), ("-" + (.pull_request.deletions|tostring))] | @tsv
-          ' <<< "$EVENT_PAYLOAD")
-
-          if [ "$ACTION" = "closed" ] && [ "$MERGED" = "true" ]; then
-            EMOJI="🟣"; STATUS="MERGED"; COLOR=11035093
-          elif [ "$ACTION" = "closed" ]; then
-            EMOJI="⚫"; STATUS="CLOSED"; COLOR=7039851
-          elif [ "$ACTION" = "ready_for_review" ]; then
-            EMOJI="✅"; STATUS="READY FOR REVIEW"; COLOR=9128191
-          else
-            EMOJI="🆕"; STATUS="OPENED"; COLOR=9128191
-          fi
-
-          DESC="${BODY:0:300}"
-          if [ ${#BODY} -gt 300 ]; then DESC="${DESC}…"; fi
-
-          EMBED=$(jq -n \
-            --arg title "$EMOJI [PR] $TITLE" \
-            --arg url "$URL" \
-            --arg desc "$DESC" \
-            --arg author "$USER" \
-            --arg icon "$USER_ICON" \
-            --arg author_url "$USER_URL" \
-            --arg repo "$GITHUB_REPOSITORY" \
-            --arg branch "\`$HEAD\` → \`$BASE\`" \
-            --arg status "$STATUS" \
-            --arg commits "$COMMITS" \
-            --arg add "$ADDITIONS" \
-            --arg del "$DELETIONS" \
-            --arg footer "Quintern • github-feed • #$NUMBER" \
-            '{
-              title: $title, url: $url, description: $desc, color: '$COLOR',
-              author: { name: $author, icon_url: $icon, url: $author_url },
-              fields: [
-                { name: "📦 Repo", value: $repo, inline: true },
-                { name: "🔀 Branch", value: $branch, inline: true },
-                { name: "📊 Status", value: $status, inline: true },
-                { name: "🧾 Commits", value: $commits, inline: true },
-                { name: "➕ Additions", value: $add, inline: true },
-                { name: "➖ Deletions", value: $del, inline: true }
-              ],
-              footer: { text: $footer, icon_url: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" },
-              timestamp: (now | todate)
-            }')
-          PAYLOAD=$(jq -n --arg embed "$EMBED" '{username: "Quintern Bot", embeds: [$embed | fromjson]}')
+          PAYLOAD=$(jq -n \
+            --arg repo "$REPO" \
+            --arg action "$ACTION" \
+            --argjson merged_bool $([ "$MERGED" = "true" ] && echo true || echo false) \
+            --argjson event "$EVENT_PAYLOAD" \
+            '
+            def emoji_status:
+              if $action == "closed" and $merged_bool then {e:"🟣", s:"MERGED", c:11035093}
+              elif $action == "closed" then {e:"⚫", s:"CLOSED", c:7039851}
+              elif $action == "ready_for_review" then {e:"✅", s:"READY FOR REVIEW", c:9128191}
+              else {e:"🆕", s:"OPENED", c:9128191}
+              end;
+            def short_desc:
+              ($event.pull_request.body // "" |
+                if length == 0 then "no description"
+                elif length > 300 then .[0:300] + "…"
+                else .
+                end);
+            def pr:
+              $event.pull_request;
+            (emoji_status) as $es |
+            {
+              username: "Quintern Bot",
+              embeds: [{
+                title: "\($es.e) [PR] #\(.pull_request.number) \(.pull_request.title)",
+                url: $event.pull_request.html_url,
+                color: $es.c,
+                author: {
+                  name: $event.pull_request.user.login,
+                  icon_url: $event.pull_request.user.avatar_url,
+                  url: $event.pull_request.user.html_url
+                },
+                fields: [
+                  { name: "📦 Repo", value: $repo, inline: true },
+                  { name: "📊 Status", value: $es.s, inline: true },
+                  { name: "🔀 Branch", value: "`\(.pull_request.head.ref)` → `\(.pull_request.base.ref)`", inline: true },
+                  { name: "🧾 Commits", value: (.pull_request.commits | tostring), inline: true },
+                  { name: "➕ Additions", value: ("+" + (.pull_request.additions | tostring)), inline: true },
+                  { name: "➖ Deletions", value: ("-" + (.pull_request.deletions | tostring)), inline: true },
+                  { name: "📝 Description", value: short_desc, inline: false }
+                ],
+                footer: { text: ("Quintern • github-feed • #\($event.pull_request.number)"), icon_url: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" },
+                timestamp: (now | todate)
+              }]
+            }
+            ')
           HTTP=$(curl -sS -o /dev/null -w "%{http_code}" -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$DISCORD_WEBHOOK")
           echo "Discord webhook returned: HTTP $HTTP"
           if [ "$HTTP" != "204" ] && [ "$HTTP" != "200" ]; then exit 1; fi

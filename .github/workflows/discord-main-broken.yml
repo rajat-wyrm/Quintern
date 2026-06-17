@@ -1,0 +1,67 @@
+name: Discord — Main Branch Broken (#ci-cd)
+
+# Tighter filter than discord-ci.yml: only pings #ci-cd when something
+# on main fails or times out. Successes on main stay quiet to avoid noise.
+# Use this for the "page someone" channel.
+
+on:
+  workflow_run:
+    workflows: ["format", "ci", "release"]
+    types: [completed]
+
+concurrency:
+  group: discord-main-broken-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  notify:
+    name: Notify #ci-cd (failures only)
+    runs-on: ubuntu-latest
+    if: |
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.head_branch == 'main'
+    steps:
+      - name: Send Discord embed
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_CICD }}
+          REPO: ${{ github.repository }}
+          EVENT_PAYLOAD: ${{ toJSON(github.event.workflow_run) }}
+        run: |
+          set -euo pipefail
+          PAYLOAD=$(jq -n \
+            --arg repo "$REPO" \
+            --argjson event "$EVENT_PAYLOAD" \
+            '
+            def commit_author: ($event.head_commit.author.username // "?");
+            def commit_msg: ($event.head_commit.message // "" | split("\n")[0] | .[0:200]);
+            def owner_login: ($event.head_repository.owner.login // "");
+            {
+              username: "Quintern CI",
+              embeds: [{
+                title: "🚨 [Main Broken] \($event.name // "?") failed",
+                url: $event.html_url,
+                color: 15158332,
+                author: {
+                  name: (if owner_login == "" then "unknown" else owner_login end),
+                  icon_url: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
+                  url: ("https://github.com/" + owner_login)
+                },
+                fields: [
+                  { name: "📦 Repo", value: $repo, inline: true },
+                  { name: "🌿 Branch", value: ("`\($event.head_branch)`"), inline: true },
+                  { name: "🔖 Commit", value: ("`\($event.head_sha[0:7])`"), inline: true },
+                  { name: "👤 Author", value: commit_author, inline: true },
+                  { name: "💬 Message", value: commit_msg, inline: false }
+                ],
+                footer: { text: ("Quintern • ci-cd • main is broken • #\($event.id)"), icon_url: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" },
+                timestamp: (if $event.updated_at == null then now else ($event.updated_at | fromdate) end | todate)
+              }]
+            }
+            ')
+          HTTP=$(curl -sS -o /dev/null -w "%{http_code}" -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$DISCORD_WEBHOOK")
+          echo "Discord webhook returned: HTTP $HTTP"
+          if [ "$HTTP" != "204" ] && [ "$HTTP" != "200" ]; then exit 1; fi
