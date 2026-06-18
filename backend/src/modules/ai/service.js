@@ -52,9 +52,23 @@ async function withTimeout(promise, ms, label) {
 // ---- Tiny in-memory cache (5 min TTL) so we don't burn quota on repeats ----
 const CACHE = new Map();
 const CACHE_TTL = 5 * 60 * 1000;
+const crypto = require('crypto');
 function cacheKey(provider, system, messages) {
-  const last = messages[messages.length - 1];
-  return `${provider}::${(last?.content || '').slice(0, 200)}`;
+  // Hash the full conversation (system + history + current message) so two
+  // different conversations that happen to end on the same final message
+  // don't collide. Previously this only used the last message, which let
+  // one user's response be served to another user verbatim (issue #2).
+  const h = crypto.createHash('sha256');
+  h.update(provider);
+  h.update('\0');
+  h.update(system);
+  for (const m of messages) {
+    h.update('\0');
+    h.update(m.role || '');
+    h.update('\0');
+    h.update(m.content || '');
+  }
+  return h.digest('hex');
 }
 function getCached(key) {
   const hit = CACHE.get(key);
@@ -290,24 +304,14 @@ async function callFastAPI({ system, messages }) {
 // ============================================================================
 //  Renders a role-aware summary from live platform data so the UI never
 //  shows an empty bubble. This is the safety net.
-async function callHeuristic({ role, message, history = [] }) {
-  let summary = {
+async function callHeuristic({ role, message, history = [], userId = null }) {
+  const summary = {
     role,
-    pending_approvals: 0,
-    open_tasks: 0,
     unread_notifications: 0,
     active_projects: 0,
   };
   try {
-    const [tasks, notifs, projects] = await Promise.all([
-      pool
-        .query(
-          `SELECT COUNT(*)::int AS c FROM project_tasks t
-                 JOIN project_members m ON m.project_id = t.project_id
-                 WHERE m.user_id = $1 AND t.deleted_at IS NULL AND t.status NOT IN ('DONE','CANCELLED')`,
-          [/* user id */ null]
-        )
-        .catch(() => ({ rows: [{ c: 0 }] })),
+    const [notifs, projects] = await Promise.all([
       pool
         .query(
           `SELECT COUNT(*)::int AS c FROM notifications WHERE read = FALSE AND deleted_at IS NULL`,
@@ -384,7 +388,7 @@ const PROVIDER_CHAIN = [
   { name: 'fastapi', fn: callFastAPI, needs: () => !!config.ai.fastapiUrl },
 ];
 
-async function ask({ role = 'INTERN', history = [], message }) {
+async function ask({ role = 'INTERN', history = [], message, userId = null }) {
   const system = SYSTEM_PROMPT(role);
   const messages = [...history, { role: 'user', content: message }];
 
@@ -426,7 +430,7 @@ async function ask({ role = 'INTERN', history = [], message }) {
   // Last-resort: local heuristic. This is always-on, no network.
   try {
     const start = Date.now();
-    const { text, model } = await callHeuristic({ role, message, history });
+    const { text, model } = await callHeuristic({ role, message, history, userId });
     return {
       answer: text,
       provider: 'heuristic',
@@ -443,18 +447,31 @@ async function ask({ role = 'INTERN', history = [], message }) {
   }
 }
 
-async function askSummary({ role = 'INTERN' }) {
+async function askSummary({ role = 'INTERN', userId = null }) {
   // Lightweight dashboard insight that doesn't even need the chat model.
   // Used by /ai/insights.
   try {
+    // If we have a userId, count tasks assigned to them; otherwise count
+    // org-wide open tasks. The previous version used a tautological
+    // subquery (`m.user_id = (SELECT id FROM users WHERE id = m.user_id)`)
+    // that returned the global count for every user.
+    const tasksQuery = userId
+      ? pool
+          .query(
+            `SELECT COUNT(*)::int AS c FROM project_tasks t
+             WHERE t.assignee_id = $1 AND t.deleted_at IS NULL AND t.status NOT IN ('DONE','CANCELLED')`,
+            [userId]
+          )
+          .catch(() => ({ rows: [{ c: 0 }] }))
+      : pool
+          .query(
+            `SELECT COUNT(*)::int AS c FROM project_tasks t
+             WHERE t.deleted_at IS NULL AND t.status NOT IN ('DONE','CANCELLED')`
+          )
+          .catch(() => ({ rows: [{ c: 0 }] }));
+
     const [tasks, notifs, projects] = await Promise.all([
-      pool
-        .query(
-          `SELECT COUNT(*)::int AS c FROM project_tasks t
-                 JOIN project_members m ON m.project_id = t.project_id
-                 WHERE m.user_id = (SELECT id FROM users WHERE id = m.user_id LIMIT 1) AND t.deleted_at IS NULL AND t.status NOT IN ('DONE','CANCELLED')`
-        )
-        .catch(() => ({ rows: [{ c: 0 }] })),
+      tasksQuery,
       pool
         .query(
           `SELECT COUNT(*)::int AS c FROM notifications WHERE read = FALSE AND deleted_at IS NULL`,
@@ -471,15 +488,17 @@ async function askSummary({ role = 'INTERN' }) {
     const prompt = `Generate 3 concise, role-aware insights (1 sentence each, markdown bullets) for a ${role} based on: ${JSON.stringify(
       {
         active_projects: projects.rows[0]?.c || 0,
+        open_tasks: tasks.rows[0]?.c || 0,
         unread_notifications: notifs.rows[0]?.c || 0,
       }
     )}`;
-    const result = await ask({ role, history: [], message: prompt });
+    const result = await ask({ role, history: [], message: prompt, userId });
     return {
       ...result,
       summary: {
         role,
         active_projects: projects.rows[0]?.c || 0,
+        open_tasks: tasks.rows[0]?.c || 0,
         unread_notifications: notifs.rows[0]?.c || 0,
       },
     };
@@ -500,6 +519,7 @@ module.exports = {
   askSummary,
   PROVIDERS: PROVIDER_CHAIN.map((p) => p.name),
   // Exported for diagnostic / test scripts
+  cacheKey,
   callGroq,
   callGemini,
   callDeepSeek,

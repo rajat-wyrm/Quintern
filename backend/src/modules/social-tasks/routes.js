@@ -14,16 +14,25 @@ module.exports = async function socialTasksRoutes(fastify) {
       schema: { tags: ['Tasks'], description: 'Create a social task' },
       preHandler: [auth, rbac('ADMIN', 'SENIOR_TL')],
     },
-    async (req) => {
-      const data = z
-        .object({
-          title: z.string().min(1).max(255),
-          description: z.string().max(2000).optional(),
-          targetPlatform: z.string().max(100).optional(),
-          taskLink: z.string().max(500).optional(),
-          deadline: z.string().optional(),
-        })
-        .parse(req.body);
+    async (req, reply) => {
+      const createSchema = z.object({
+        title: z.string().min(1).max(255),
+        description: z.string().max(2000).optional(),
+        targetPlatform: z.string().max(100).optional(),
+        taskLink: z.string().max(500).optional(),
+        deadline: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/, 'deadline must be YYYY-MM-DD')
+          .optional(),
+      });
+      const parsed = createSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.status(400).send({
+          error: 'Validation failed',
+          details: parsed.error.issues,
+        });
+      }
+      const data = parsed.data;
 
       const task = await repo.createTask({ ...data, createdBy: req.user.id });
       await createAuditLog({

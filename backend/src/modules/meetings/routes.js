@@ -45,21 +45,29 @@ async function routes(fastify) {
     '/',
     { preHandler: [auth, rbac('ADMIN', 'SENIOR_TL', 'TL')] },
     async (req, reply) => {
-      const schema = z.object({
-        title: z.string().min(3),
-        description: z.string().optional(),
-        meetingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-        startTime: z.string().optional(),
-        endTime: z.string().optional(),
-        departmentId: z.string().uuid().optional(),
-        attendeeIds: z.array(z.string().uuid()).optional(),
-      });
+      const schema = z
+        .object({
+          title: z.string().min(3),
+          description: z.string().optional(),
+          meetingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          startTime: z
+            .string()
+            .regex(/^\d{2}:\d{2}(:\d{2})?$/, 'startTime must be HH:MM or HH:MM:SS')
+            .optional(),
+          endTime: z
+            .string()
+            .regex(/^\d{2}:\d{2}(:\d{2})?$/, 'endTime must be HH:MM or HH:MM:SS')
+            .optional(),
+          departmentId: z.string().uuid().optional(),
+          attendeeIds: z.array(z.string().uuid()).optional(),
+        })
+        .strict();
       const validation = schema.safeParse(req.body);
 
       if (!validation.success) {
         return reply.status(400).send({
           error: 'Validation failed',
-          details: validation.error.errors,
+          details: validation.error.issues,
         });
       }
 
@@ -96,7 +104,43 @@ async function routes(fastify) {
           .status(403)
           .send({ error: 'Only creator or admin can update' });
       }
-      const updated = await repo.updateMeeting(req.params.id, req.body);
+      const patchSchema = z
+        .object({
+          title: z.string().min(3).optional(),
+          description: z.string().optional(),
+          meeting_date: z
+            .string()
+            .regex(/^\d{4}-\d{2}-\d{2}$/, 'meeting_date must be YYYY-MM-DD')
+            .optional(),
+          start_time: z
+            .string()
+            .regex(/^\d{2}:\d{2}(:\d{2})?$/, 'start_time must be HH:MM or HH:MM:SS')
+            .optional(),
+          end_time: z
+            .string()
+            .regex(/^\d{2}:\d{2}(:\d{2})?$/, 'end_time must be HH:MM or HH:MM:SS')
+            .optional(),
+        })
+        .strict();
+      const parsed = patchSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.status(400).send({
+          error: 'Validation failed',
+          details: parsed.error.issues,
+        });
+      }
+      if (Object.keys(parsed.data).length === 0) {
+        return reply.status(400).send({ error: 'No updatable fields provided' });
+      }
+      const updated = await repo.updateMeeting(req.params.id, parsed.data);
+      await createAuditLog({
+        userId: req.user.id,
+        action: 'MEETING_UPDATED',
+        resourceType: 'meeting',
+        resourceId: req.params.id,
+        details: parsed.data,
+        ...extractRequestInfo(req),
+      });
       return updated;
     }
   );

@@ -1,0 +1,78 @@
+name: Lint discord-*.yml
+
+# Replays every discord-*.yml script with a synthetic GitHub event payload
+# and a stubbed `curl`. Fails the build if any workflow produces invalid
+# JSON, a non-zero exit, or relies on bash patterns that have bitten us
+# before (bare `read -r`, backtick command substitution, jq `.` instead
+# of `$event` / `$release`).
+#
+# The replay script lives at .github/workflows/scripts/replay.js so the
+# logic is reviewable in-tree and can be run locally:
+#   NODE_PATH=./backend/node_modules node .github/workflows/scripts/replay.js
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/discord-*.yml'
+      - '.github/workflows/discord-workflows-lint.yml'
+      - '.github/workflows/scripts/replay.js'
+  pull_request:
+    paths:
+      - '.github/workflows/discord-*.yml'
+      - '.github/workflows/discord-workflows-lint.yml'
+      - '.github/workflows/scripts/replay.js'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint discord-*.yml builds valid JSON
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install js-yaml for the replay harness
+        run: npm install --prefix /tmp/replay-deps --no-save --no-audit --no-fund js-yaml@4
+
+      - name: Detect forbidden bash patterns
+        run: |
+          set -euo pipefail
+          bad=0
+          for f in .github/workflows/discord-*.yml; do
+            # `read -r` without IFS scope → shreds fields on space (issue #3)
+            if grep -nE '(^|[^I])read -r [A-Z_][A-Z0-9_]+ ' "$f" >/dev/null; then
+              echo "::error file=$f::bare \`read -r\` (no IFS scope) — fields will shred on space"
+              grep -nE '(^|[^I])read -r [A-Z_][A-Z0-9_]+ ' "$f" || true
+              bad=1
+            fi
+            # Backtick fallback that turns into bare-word command exec (PR #5 trap)
+            if grep -nE 'if \[ -z "\$[A-Z_]+" \]; then [A-Z_]+=`[a-z]+`; fi' "$f" >/dev/null; then
+              echo "::error file=$f::backtick fallback (\`none\`, \`unassigned\`, etc.) — bash will try to execute the bare word"
+              bad=1
+            fi
+            # `jq -n ... '.' ...` referencing `.` (the null input) instead of the named variable
+            # Cheap heuristic: look for `jq -n` with `\.<field>` access on the same line, which
+            # is the symptom of the PR #7 bug.
+            if grep -nE 'jq -n.*\\.([a-z_]+|pull_request|release|head_branch|head_sha|head_commit|workflow_run|name|tag_name)' "$f" >/dev/null; then
+              echo "::warning file=$f::jq -n references \`.<field>\` — likely should be \$event/\$release/\$workflow_run"
+              bad=1
+            fi
+          done
+          if [ "$bad" -ne 0 ]; then
+            echo "Lint failed: forbidden bash patterns present."
+            exit 1
+          fi
+          echo "Pattern checks: OK"
+
+      - name: Replay each workflow against a synthetic event
+        env:
+          NODE_PATH: /tmp/replay-deps/node_modules
+        run: node .github/workflows/scripts/replay.js

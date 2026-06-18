@@ -18,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Send Discord embed
+        if: github.event.pull_request.user.login != 'dependabot[bot]' && github.event.comment.user.login != 'dependabot[bot]'
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_FEED }}
           ACTION: ${{ github.event.action }}
@@ -62,6 +63,7 @@ jobs:
               }]
             }
             ')
-          HTTP=$(curl -sS -o /dev/null -w "%{http_code}" -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$DISCORD_WEBHOOK")
+          HTTP=$(curl -sS --max-time 15 --retry 3 --retry-delay 2 --retry-connrefused \
+              -o /dev/null -w "%{http_code}" -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$DISCORD_WEBHOOK")
           echo "Discord webhook returned: HTTP $HTTP"
           if [ "$HTTP" != "204" ] && [ "$HTTP" != "200" ]; then exit 1; fi

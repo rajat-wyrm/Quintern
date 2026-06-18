@@ -24,26 +24,32 @@ module.exports = async function ratingsRoutes(fastify) {
       ],
     },
     async (req, reply) => {
-      const { rated_user_id, score, remarks, category } = z
-        .object({
-          rated_user_id: z.string().uuid(),
-          // 1-10 scale per UptoSkills rating spec. Never 1-5.
-          score: z.coerce.number().int().min(1).max(10),
-          remarks: z.string().max(2000).optional(),
-          category: z
-            .enum([
-              'PERFORMANCE',
-              'TASK',
-              'PROJECT',
-              'INTERN',
-              'TEAM',
-              'MENTOR',
-              'REVIEW',
-            ])
-            .optional()
-            .default('PERFORMANCE'),
-        })
-        .parse(req.body);
+      const ratingSchema = z.object({
+        rated_user_id: z.string().uuid(),
+        // 1-10 scale per UptoSkills rating spec. Never 1-5.
+        score: z.coerce.number().int().min(1).max(10),
+        remarks: z.string().max(2000).optional(),
+        category: z
+          .enum([
+            'PERFORMANCE',
+            'TASK',
+            'PROJECT',
+            'INTERN',
+            'TEAM',
+            'MENTOR',
+            'REVIEW',
+          ])
+          .optional()
+          .default('PERFORMANCE'),
+      });
+      const parsed = ratingSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.status(400).send({
+          error: 'Validation failed',
+          details: parsed.error.issues,
+        });
+      }
+      const { rated_user_id, score, remarks, category } = parsed.data;
 
       // Defense-in-depth: also walk the full hierarchy as a backstop. The
       // directManager middleware above already validated the strict SRS step,

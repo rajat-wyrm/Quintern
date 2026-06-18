@@ -138,15 +138,27 @@ async function routes(fastify) {
       }
 
       const results = await repo.bulkMark(entries, req.user.id);
+      // Record the full set of dates affected, not just the first one —
+      // bulk operations routinely span multiple dates and the audit log
+      // must be faithful to what actually happened.
+      const dates = [...new Set(entries.map((e) => e.date))].sort();
       await createAuditLog({
         userId: req.user.id,
         ...extractRequestInfo(req),
         action: 'ATTENDANCE_BULK_MARKED',
         resourceType: 'attendance',
-        details: { count: results.length, date: entries[0]?.date },
+        details: {
+          count: results.length,
+          dates,
+          date_range:
+            dates.length > 1
+              ? { from: dates[0], to: dates[dates.length - 1] }
+              : { from: dates[0], to: dates[0] },
+        },
       });
       // Fire-and-track notifications. Best-effort — don't fail the request
-      // if a notify fails.
+      // if a notify fails. Promise.allSettled never rejects, so no .catch
+      // is needed (the old `.catch(() => {})` was dead code).
       Promise.allSettled(
         entries.map((e) =>
           sendNotification(
@@ -154,7 +166,7 @@ async function routes(fastify) {
             `Your attendance for ${e.date} has been marked as ${e.status}.`
           )
         )
-      ).catch(() => {});
+      );
       return { success: true, count: results.length, records: results };
     }
   );

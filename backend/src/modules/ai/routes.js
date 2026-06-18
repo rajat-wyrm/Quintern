@@ -31,11 +31,18 @@ async function routes(fastify) {
         .status(400)
         .send({ error: 'Bad Request', details: parsed.error.format() });
     }
-    const { message, role, history } = parsed.data;
-    // Use the user's actual role if not overridden
-    const effectiveRole = req.user.role || role;
+    const { message, history } = parsed.data;
+    // Always use the authenticated user's role. The `role` field in the
+    // request body is intentionally ignored (kept for client convenience
+    // / backwards-compat) — using it would let a user escalate context.
+    const effectiveRole = req.user.role;
     try {
-      const result = await ask({ role: effectiveRole, history, message });
+      const result = await ask({
+        role: effectiveRole,
+        history,
+        message,
+        userId: req.user.id,
+      });
       return result;
     } catch (err) {
       req.log.error({ err: err.message, errors: err.errors }, 'AI proxy error');
@@ -51,7 +58,7 @@ async function routes(fastify) {
   fastify.get('/insights', { preHandler: [auth] }, async (req) => {
     const role = req.user.role;
     try {
-      const result = await askSummary({ role });
+      const result = await askSummary({ role, userId: req.user.id });
       return result;
     } catch (err) {
       req.log.error({ err: err.message }, 'AI insights error');
