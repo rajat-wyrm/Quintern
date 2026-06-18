@@ -1,48 +1,39 @@
 backend:
-  - changed-files:
-      - any-glob-to-any-file: backend/**
+  - 'backend/**'
 
 frontend:
-  - changed-files:
-      - any-glob-to-any-file: frontend/**
+  - 'frontend/**'
 
 docs:
-  - changed-files:
-      - any-glob-to-any-file: '**/*.md'
-      - any-glob-to-any-file: docs/**
+  - '**/*.md'
+  - 'docs/**'
 
 ci:
-  - changed-files:
-      - any-glob-to-any-file: '.github/workflows/**'
-      - any-glob-to-any-file: '.github/**/*.{yml,yaml}'
-      - any-glob-to-any-file: renovate.json
+  - '.github/workflows/**'
+  - '.github/**/*.{yml,yaml}'
+  - 'renovate.json'
 
 ai-ml:
-  - changed-files:
-      - any-glob-to-any-file: backend/src/modules/ai/**
-      - any-glob-to-any-file: backend/src/config/ai.js
+  - 'backend/src/modules/ai/**'
+  - 'backend/src/config/ai.js'
 
 database:
-  - changed-files:
-      - any-glob-to-any-file: backend/migrations/**
-      - any-glob-to-any-file: backend/seeds/**
-      - any-glob-to-any-file: '**/*migration*'
-      - any-glob-to-any-file: '**/*schema*'
+  - 'backend/migrations/**'
+  - 'backend/seeds/**'
+  - '**/*migration*'
+  - '**/*schema*'
 
 tests:
-  - changed-files:
-      - any-glob-to-any-file: '**/*.test.js'
-      - any-glob-to-any-file: '**/*.spec.js'
-      - any-glob-to-any-file: backend/tests/**
+  - '**/*.test.js'
+  - '**/*.spec.js'
+  - 'backend/tests/**'
 
 dependencies:
-  - changed-files:
-      - any-glob-to-any-file: '**/package.json'
-      - any-glob-to-any-file: '**/package-lock.json'
-      - any-glob-to-any-file: renovate.json
+  - '**/package.json'
+  - '**/package-lock.json'
+  - 'renovate.json'
 
 security:
-  - changed-files:
-      - any-glob-to-any-file: backend/src/middleware/auth*
-      - any-glob-to-any-file: backend/src/middleware/**/auth*
-      - any-glob-to-any-file: backend/src/utils/hierarchy.js
+  - 'backend/src/middleware/auth*'
+  - 'backend/src/middleware/**/auth*'
+  - 'backend/src/utils/hierarchy.js'
