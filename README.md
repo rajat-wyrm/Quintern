@@ -36,13 +36,13 @@ cd ../frontend && npm run dev
 
 Open `http://localhost:5173` — all seeded users use password `Quintern@2026`.
 
-| Role | Email |
-|---|---|
-| Admin | `admin@quintern.com` |
+| Role      | Email                       |
+| --------- | --------------------------- |
+| Admin     | `admin@quintern.com`        |
 | Senior TL | `priya.senior@quintern.com` |
-| TL | `neha.tl@quintern.com` |
-| Captain | `vikram.cap@quintern.com` |
-| Intern | `aarav.intern@quintern.com` |
+| TL        | `neha.tl@quintern.com`      |
+| Captain   | `vikram.cap@quintern.com`   |
+| Intern    | `aarav.intern@quintern.com` |
 
 ```bash
 # Ops helper
@@ -53,10 +53,10 @@ Open `http://localhost:5173` — all seeded users use password `Quintern@2026`.
 
 ## Documentation
 
-| Document | What it covers |
-|---|---|
-| [Architecture (HLD)](docs/ARCHITECTURE.md) | System context, container diagram, module interaction map, request lifecycle, 5 data-flow scenarios, deployment topology, scaling, observability |
-| [Design (LLD)](docs/DESIGN.md) | Database schema (28 tables, 12 migrations), full API reference (80+ endpoints), middleware chain (auth → RBAC → ownership → directManager), auth flow (JWT + refresh + CSRF), Socket.IO events, security controls, env config, testing strategy |
+| Document                                   | What it covers                                                                                                                                                                                                                                  |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Architecture (HLD)](docs/ARCHITECTURE.md) | System context, container diagram, module interaction map, request lifecycle, 5 data-flow scenarios, deployment topology, scaling, observability                                                                                                |
+| [Design (LLD)](docs/DESIGN.md)             | Database schema (28 tables, 12 migrations), full API reference (80+ endpoints), middleware chain (auth → RBAC → ownership → directManager), auth flow (JWT + refresh + CSRF), Socket.IO events, security controls, env config, testing strategy |
 
 ## At a Glance
 

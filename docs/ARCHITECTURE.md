@@ -32,18 +32,18 @@
 
 ### External Actors
 
-| Actor | Role | Interaction |
-|-------|------|-------------|
-| **Admin** | Full access to all modules | Web UI, API |
-| **Senior TL** | Department-wide management | Web UI, API |
-| **TL** | Team-lead management of Captains + Interns | Web UI, API |
-| **Captain** | Direct management of Interns | Web UI, API |
-| **Intern** | Self-service attendance, tasks, proofs | Web UI, API |
-| **Stripe** | Payment webhook provider | HTTPS callback |
-| **Cloudinary** | File storage (avatars, proofs) | HTTPS upload |
-| **AI Providers** (×7) | LLM inference chain | HTTPS API calls |
-| **Neon (PostgreSQL)** | Primary data store | TCP/SSL |
-| **Upstash (Redis)** | Cache, rate-limit, session blacklist | HTTPS REST |
+| Actor                 | Role                                       | Interaction     |
+| --------------------- | ------------------------------------------ | --------------- |
+| **Admin**             | Full access to all modules                 | Web UI, API     |
+| **Senior TL**         | Department-wide management                 | Web UI, API     |
+| **TL**                | Team-lead management of Captains + Interns | Web UI, API     |
+| **Captain**           | Direct management of Interns               | Web UI, API     |
+| **Intern**            | Self-service attendance, tasks, proofs     | Web UI, API     |
+| **Stripe**            | Payment webhook provider                   | HTTPS callback  |
+| **Cloudinary**        | File storage (avatars, proofs)             | HTTPS upload    |
+| **AI Providers** (×7) | LLM inference chain                        | HTTPS API calls |
+| **Neon (PostgreSQL)** | Primary data store                         | TCP/SSL         |
+| **Upstash (Redis)**   | Cache, rate-limit, session blacklist       | HTTPS REST      |
 
 ---
 
@@ -230,16 +230,16 @@ Client                    Server
 
 Errors propagate through Fastify's error handler:
 
-| Error Source | HTTP Code | Response Shape |
-|---|---|---|
-| Zod validation | 400 | `{ error, details: [{ field, message }] }` |
-| JWT missing/expired | 401 | `{ error: "Unauthorized" }` |
-| RBAC deny | 403 | `{ error: "Forbidden" }` |
-| Ownership deny | 403 | `{ error: "Forbidden" }` |
-| Not found (DB) | 404 | `{ error: "Not found" }` |
-| Invalid UUID | 400 | `{ error: "Invalid ID format" }` |
-| Rate-limited | 429 | `{ error: "Too many requests" }` |
-| Internal | 500 | `{ error: "Internal server error" }` |
+| Error Source        | HTTP Code | Response Shape                             |
+| ------------------- | --------- | ------------------------------------------ |
+| Zod validation      | 400       | `{ error, details: [{ field, message }] }` |
+| JWT missing/expired | 401       | `{ error: "Unauthorized" }`                |
+| RBAC deny           | 403       | `{ error: "Forbidden" }`                   |
+| Ownership deny      | 403       | `{ error: "Forbidden" }`                   |
+| Not found (DB)      | 404       | `{ error: "Not found" }`                   |
+| Invalid UUID        | 400       | `{ error: "Invalid ID format" }`           |
+| Rate-limited        | 429       | `{ error: "Too many requests" }`           |
+| Internal            | 500       | `{ error: "Internal server error" }`       |
 
 ---
 
@@ -422,14 +422,14 @@ docker compose -f docker-compose.monitoring.yml up -d
 
 ## Scaling Strategy
 
-| Tier | Strategy | Limit |
-|---|---|---|
-| **Frontend** | Static SPA, CDN-cached by Vercel | Infinity |
-| **Backend** | Stateless, horizontal scaling on Render. Behind load balancer | Instance count |
-| **Socket.IO** | Single-instance v1. Multi-instance with `@socket.io/redis-adapter` planned v2 | ~10k conn/instance |
-| **Database** | Neon auto-scales. PgBouncer transaction mode. Read replicas for analytics | Connection pool |
-| **Cache** | Upstash Redis serverless, auto-scales | Per-plan QPS |
-| **AI** | Provider chain degrades gracefully. 200-entry LRU cache reduces quota burn | Per-provider rate limit |
+| Tier          | Strategy                                                                      | Limit                   |
+| ------------- | ----------------------------------------------------------------------------- | ----------------------- |
+| **Frontend**  | Static SPA, CDN-cached by Vercel                                              | Infinity                |
+| **Backend**   | Stateless, horizontal scaling on Render. Behind load balancer                 | Instance count          |
+| **Socket.IO** | Single-instance v1. Multi-instance with `@socket.io/redis-adapter` planned v2 | ~10k conn/instance      |
+| **Database**  | Neon auto-scales. PgBouncer transaction mode. Read replicas for analytics     | Connection pool         |
+| **Cache**     | Upstash Redis serverless, auto-scales                                         | Per-plan QPS            |
+| **AI**        | Provider chain degrades gracefully. 200-entry LRU cache reduces quota burn    | Per-provider rate limit |
 
 ---
 
@@ -440,29 +440,36 @@ docker compose -f docker-compose.monitoring.yml up -d
 Every request gets a UUID `reqId`. Structured JSON logs at configurable level (default `info`).
 
 ```json
-{ "level": 30, "time": 1718612345678, "reqId": "abc-123", "req": { "method": "GET", "url": "/api/users/me" }, "res": { "statusCode": 200 }, "responseTime": 12 }
+{
+  "level": 30,
+  "time": 1718612345678,
+  "reqId": "abc-123",
+  "req": { "method": "GET", "url": "/api/users/me" },
+  "res": { "statusCode": 200 },
+  "responseTime": 12
+}
 ```
 
 ### Metrics (Prometheus)
 
-| Metric | Type | Labels |
-|---|---|---|
-| `http_request_duration_ms` | Histogram | method, route, status_code |
-| `http_requests_active` | Gauge | — |
-| `process_cpu_user_seconds_total` | Counter | — |
-| `process_resident_memory_bytes` | Gauge | — |
-| `nodejs_eventloop_lag_seconds` | Gauge | — |
+| Metric                           | Type      | Labels                     |
+| -------------------------------- | --------- | -------------------------- |
+| `http_request_duration_ms`       | Histogram | method, route, status_code |
+| `http_requests_active`           | Gauge     | —                          |
+| `process_cpu_user_seconds_total` | Counter   | —                          |
+| `process_resident_memory_bytes`  | Gauge     | —                          |
+| `nodejs_eventloop_lag_seconds`   | Gauge     | —                          |
 
 ### Health Probes
 
-| Endpoint | Purpose | Expected |
-|---|---|---|
-| `GET /health` | Liveness + DB ping | `200 { status: "ok" }` |
-| `GET /health/db` | DB-only check | `200` or `503` |
-| `GET /health/full` | DB + Redis check | `200` or `503` |
-| `GET /api/ready` | Process readiness | `200` |
+| Endpoint           | Purpose                 | Expected                       |
+| ------------------ | ----------------------- | ------------------------------ |
+| `GET /health`      | Liveness + DB ping      | `200 { status: "ok" }`         |
+| `GET /health/db`   | DB-only check           | `200` or `503`                 |
+| `GET /health/full` | DB + Redis check        | `200` or `503`                 |
+| `GET /api/ready`   | Process readiness       | `200`                          |
 | `GET /api/version` | Deployment verification | `{ name, version, node, env }` |
-| `GET /metrics` | Prometheus scrape | `text/plain` exposition |
+| `GET /metrics`     | Prometheus scrape       | `text/plain` exposition        |
 
 ---
 
