@@ -226,6 +226,9 @@ describe('Attendance bulk audit log records all dates', () => {
     const details = audit.rows[0].details;
     expect(details.count).toBe(3);
     expect(details.dates).toEqual(['2026-06-10', '2026-06-11', '2026-06-12']);
-    expect(details.date_range).toEqual({ from: '2026-06-10', to: '2026-06-12' });
+    expect(details.date_range).toEqual({
+      from: '2026-06-10',
+      to: '2026-06-12',
+    });
   });
 });

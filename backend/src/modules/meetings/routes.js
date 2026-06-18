@@ -52,11 +52,17 @@ async function routes(fastify) {
           meetingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
           startTime: z
             .string()
-            .regex(/^\d{2}:\d{2}(:\d{2})?$/, 'startTime must be HH:MM or HH:MM:SS')
+            .regex(
+              /^\d{2}:\d{2}(:\d{2})?$/,
+              'startTime must be HH:MM or HH:MM:SS'
+            )
             .optional(),
           endTime: z
             .string()
-            .regex(/^\d{2}:\d{2}(:\d{2})?$/, 'endTime must be HH:MM or HH:MM:SS')
+            .regex(
+              /^\d{2}:\d{2}(:\d{2})?$/,
+              'endTime must be HH:MM or HH:MM:SS'
+            )
             .optional(),
           departmentId: z.string().uuid().optional(),
           attendeeIds: z.array(z.string().uuid()).optional(),
@@ -114,11 +120,17 @@ async function routes(fastify) {
             .optional(),
           start_time: z
             .string()
-            .regex(/^\d{2}:\d{2}(:\d{2})?$/, 'start_time must be HH:MM or HH:MM:SS')
+            .regex(
+              /^\d{2}:\d{2}(:\d{2})?$/,
+              'start_time must be HH:MM or HH:MM:SS'
+            )
             .optional(),
           end_time: z
             .string()
-            .regex(/^\d{2}:\d{2}(:\d{2})?$/, 'end_time must be HH:MM or HH:MM:SS')
+            .regex(
+              /^\d{2}:\d{2}(:\d{2})?$/,
+              'end_time must be HH:MM or HH:MM:SS'
+            )
             .optional(),
         })
         .strict();
@@ -130,7 +142,9 @@ async function routes(fastify) {
         });
       }
       if (Object.keys(parsed.data).length === 0) {
-        return reply.status(400).send({ error: 'No updatable fields provided' });
+        return reply
+          .status(400)
+          .send({ error: 'No updatable fields provided' });
       }
       const updated = await repo.updateMeeting(req.params.id, parsed.data);
       await createAuditLog({

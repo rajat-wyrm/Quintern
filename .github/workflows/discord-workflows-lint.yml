@@ -47,6 +47,11 @@ jobs:
           set -euo pipefail
           bad=0
           for f in .github/workflows/discord-*.yml; do
+            # Don't lint the linter itself (it legitimately contains the
+            # patterns it checks for, as documentation in echo messages).
+            case "$f" in
+              */discord-workflows-lint.yml) continue ;;
+            esac
             # `read -r` without IFS scope → shreds fields on space (issue #3)
             if grep -nE '(^|[^I])read -r [A-Z_][A-Z0-9_]+ ' "$f" >/dev/null; then
               echo "::error file=$f::bare \`read -r\` (no IFS scope) — fields will shred on space"
@@ -59,10 +64,11 @@ jobs:
               bad=1
             fi
             # `jq -n ... '.' ...` referencing `.` (the null input) instead of the named variable
-            # Cheap heuristic: look for `jq -n` with `\.<field>` access on the same line, which
-            # is the symptom of the PR #7 bug.
+            # (PR #7 bug). This is a heuristic — false positives are possible.
+            # Fail-fast: if the heuristic fires, a human should review the match.
             if grep -nE 'jq -n.*\\.([a-z_]+|pull_request|release|head_branch|head_sha|head_commit|workflow_run|name|tag_name)' "$f" >/dev/null; then
-              echo "::warning file=$f::jq -n references \`.<field>\` — likely should be \$event/\$release/\$workflow_run"
+              echo "::warning file=$f::jq -n references \`.<field>\` — likely should be \$event/\$release/\$workflow_run. Review the match below:"
+              grep -nE 'jq -n.*\\.([a-z_]+|pull_request|release|head_branch|head_sha|head_commit|workflow_run|name|tag_name)' "$f" || true
               bad=1
             fi
           done

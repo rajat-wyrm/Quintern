@@ -430,7 +430,12 @@ async function ask({ role = 'INTERN', history = [], message, userId = null }) {
   // Last-resort: local heuristic. This is always-on, no network.
   try {
     const start = Date.now();
-    const { text, model } = await callHeuristic({ role, message, history, userId });
+    const { text, model } = await callHeuristic({
+      role,
+      message,
+      history,
+      userId,
+    });
     return {
       answer: text,
       provider: 'heuristic',
