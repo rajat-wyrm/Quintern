@@ -1,0 +1,23 @@
+name: All Contributors
+
+on:
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  all-contributors:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate contributors
+        uses: allcontributors/cli@latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.ALL_CONTRIBUTORS_TOKEN }}
+        with:
+          args: |
+            --config .all-contributorsrc
+            ${{ github.event.pull_request.user.login }}
