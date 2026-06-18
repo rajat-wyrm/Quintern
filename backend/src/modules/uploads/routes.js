@@ -170,7 +170,10 @@ async function routes(fastify) {
   fastify.get('/file/:filename', { preHandler: [auth] }, async (req, reply) => {
     // Strict filename guard: no path separators, no traversal, known prefix.
     const safe = path.basename(req.params.filename);
-    if (!/^avatar_[a-f0-9-]+_[a-f0-9]{16}\.(png|jpg|gif|webp)$/.test(safe)) {
+    if (
+      !/^avatar_[a-f0-9-]+_[a-f0-9]{16}\.(png|jpg|gif|webp)$/.test(safe) &&
+      !/^file_[a-f0-9]{16}\.(png|jpg|gif|webp)$/.test(safe)
+    ) {
       return reply.status(400).send({ error: 'Invalid filename' });
     }
     const uploadPath = path.join(__dirname, '..', '..', '..', config.uploadDir);
@@ -194,7 +197,13 @@ async function routes(fastify) {
         webp: 'image/webp',
       }[ext] || 'application/octet-stream';
     reply.header('Content-Type', mime);
+    reply.header('Content-Disposition', `inline; filename="${safe}"`);
+    reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('Cache-Control', 'private, max-age=300');
+    // nosemgrep: javascript.express.security.audit.express-path-join-resolve-traversal.express-path-join-resolve-traversal
+    // nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write
+    // Path traversal is blocked above (path.basename + regex whitelist + path.relative containment).
+    // XSS is blocked by: strict filename regex, extension-derived MIME, and X-Content-Type-Options: nosniff.
     return reply.send(fs.createReadStream(filePath));
   });
 }

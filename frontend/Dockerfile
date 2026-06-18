@@ -110,5 +110,9 @@ RUN chmod +x /docker-entrypoint.sh
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD curl -fsS http://localhost:80/ >/dev/null || exit 1
 
+# Drop privileges — never run nginx workers as root. The `nginx` user is
+# pre-created in the nginx:alpine base image (uid 101).
+USER nginx
+
 EXPOSE 80
 ENTRYPOINT ["/sbin/tini", "--", "/docker-entrypoint.sh"]
