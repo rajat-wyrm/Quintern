@@ -33,6 +33,20 @@ function authHeaders() {
   };
 }
 
+async function loginAs(email) {
+  const res = await app.inject({
+    method: 'POST',
+    url: '/api/auth/login',
+    headers: {
+      'X-CSRF-Token': csrfToken,
+      'Content-Type': 'application/json',
+    },
+    payload: { email, password: 'Quintern@2026' },
+  });
+  expect(res.statusCode).toBe(200);
+  return JSON.parse(res.body).accessToken;
+}
+
 describe('Meetings PATCH hardening (issue #4)', () => {
   let mId;
   beforeAll(async () => {
@@ -191,6 +205,87 @@ describe('AI cache key includes history (issue #2)', () => {
   it('different providers yield different keys', () => {
     const msgs = [{ role: 'user', content: 'hi' }];
     expect(cacheKey('groq', 's', msgs)).not.toBe(cacheKey('gemini', 's', msgs));
+  });
+});
+
+describe('AI search scopes results by hierarchy', () => {
+  it('keeps an intern on self-only results', async () => {
+    const internToken = await loginAs('aarav.intern@quintern.com');
+    const internHeaders = {
+      Authorization: `Bearer ${internToken}`,
+      'X-CSRF-Token': csrfToken,
+    };
+
+    const selfRes = await app.inject({
+      method: 'GET',
+      url: '/api/ai/search?q=Aarav',
+      headers: internHeaders,
+    });
+    expect(selfRes.statusCode).toBe(200);
+    const selfBody = JSON.parse(selfRes.body);
+    expect(selfBody.users.some((u) => u.email === 'aarav.intern@quintern.com')).toBe(true);
+
+    const userLeakRes = await app.inject({
+      method: 'GET',
+      url: '/api/ai/search?q=Priya',
+      headers: internHeaders,
+    });
+    expect(userLeakRes.statusCode).toBe(200);
+    const userLeakBody = JSON.parse(userLeakRes.body);
+    expect(userLeakBody.users).toHaveLength(0);
+
+    const projectLeakRes = await app.inject({
+      method: 'GET',
+      url: '/api/ai/search?q=Quintern',
+      headers: internHeaders,
+    });
+    expect(projectLeakRes.statusCode).toBe(200);
+    const projectLeakBody = JSON.parse(projectLeakRes.body);
+    expect(projectLeakBody.projects).toHaveLength(0);
+
+    const taskLeakRes = await app.inject({
+      method: 'GET',
+      url: '/api/ai/search?q=Groq',
+      headers: internHeaders,
+    });
+    expect(taskLeakRes.statusCode).toBe(200);
+    const taskLeakBody = JSON.parse(taskLeakRes.body);
+    expect(taskLeakBody.tasks).toHaveLength(0);
+  });
+
+  it('lets a captain search direct reports and their tasks', async () => {
+    const captainToken = await loginAs('vikram.cap@quintern.com');
+    const captainHeaders = {
+      Authorization: `Bearer ${captainToken}`,
+      'X-CSRF-Token': csrfToken,
+    };
+
+    const userRes = await app.inject({
+      method: 'GET',
+      url: '/api/ai/search?q=Aarav',
+      headers: captainHeaders,
+    });
+    expect(userRes.statusCode).toBe(200);
+    const userBody = JSON.parse(userRes.body);
+    expect(userBody.users.some((u) => u.email === 'aarav.intern@quintern.com')).toBe(true);
+
+    const taskRes = await app.inject({
+      method: 'GET',
+      url: '/api/ai/search?q=Neon',
+      headers: captainHeaders,
+    });
+    expect(taskRes.statusCode).toBe(200);
+    const taskBody = JSON.parse(taskRes.body);
+    expect(taskBody.tasks.some((t) => t.title === 'Set up Neon PostgreSQL 18')).toBe(true);
+
+    const adminLeakRes = await app.inject({
+      method: 'GET',
+      url: '/api/ai/search?q=System Admin',
+      headers: captainHeaders,
+    });
+    expect(adminLeakRes.statusCode).toBe(200);
+    const adminLeakBody = JSON.parse(adminLeakRes.body);
+    expect(adminLeakBody.users).toHaveLength(0);
   });
 });
 
