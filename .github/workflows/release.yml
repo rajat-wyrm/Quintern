@@ -43,9 +43,12 @@ jobs:
 
       - name: Determine tag
         id: tag
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
           else
             echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
           fi
@@ -79,9 +82,10 @@ jobs:
           echo "Frontend built: $(du -sh dist | cut -f1)"
 
       - name: Package artifacts
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
         run: |
           mkdir -p release-artifacts
-          TAG="${{ steps.tag.outputs.tag }}"
           # Frontend SPA
           (cd frontend && tar -czf "../release-artifacts/frontend-${TAG}.tar.gz" dist)
           # Backend runtime

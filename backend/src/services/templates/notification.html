@@ -82,6 +82,9 @@
                         padding: 12px 32px;
                       "
                     >
+                      <!-- nosemgrep: generic.html-templates.security.var-in-href.var-in-href
+                           actionUrl is built server-side from APP_URL env var; see backend/src/modules/social-tasks/routes.js.
+                           Internal notification target — never rendered from user input. -->
                       <a
                         href="{{actionUrl}}"
                         style="
