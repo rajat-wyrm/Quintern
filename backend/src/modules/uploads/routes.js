@@ -110,7 +110,8 @@ async function routes(fastify) {
   });
 
   // Generic file upload — admins only, for proof attachments / documents
-  fastify.post('/file', { preHandler: [auth] }, async (req, reply) => {
+ // Generic file upload — admins only, for proof attachments / documents
+fastify.post('/file', { preHandler: [auth, rbac('ADMIN', 'SENIOR_TL', 'TL', 'CAPTAIN')] }, async (req, reply) => {
     const data = await req.file();
     if (!data) return reply.status(400).send({ error: 'No file uploaded' });
     if (!ALLOWED_MIME.has(data.mimetype)) {
