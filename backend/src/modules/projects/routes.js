@@ -17,7 +17,7 @@ function canManage(role) {
 
 async function ensureProjectAccess(projectId, user) {
   if (user.role === 'ADMIN' || user.role === 'SENIOR_TL') return true;
-  const p = await repo.getProject(projectId, { id: user.id, role: 'ADMIN' });
+  const p = await repo.getProject(projectId, { id: user.id, role: user.role });
   return !!p;
 }
 
