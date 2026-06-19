@@ -78,37 +78,78 @@ async function routes(fastify) {
   fastify.get('/search', { preHandler: [auth] }, async (req) => {
     const q = String(req.query.q || '').trim();
     if (!q) return { users: [], projects: [], tasks: [] };
+
+    const isScoped = req.user.role !== 'ADMIN' && req.user.role !== 'SENIOR_TL';
+
     const [users, projects, tasks] = await Promise.all([
       pool
         .query(
-          `
-        SELECT id, email, full_name, role FROM users
-        WHERE deleted_at IS NULL
-          AND (full_name ILIKE $1 OR email ILIKE $1)
-        ORDER BY full_name ASC LIMIT 10
-      `,
-          [`%${q}%`]
+          isScoped
+            ? `
+          SELECT id, email, full_name, role FROM users
+          WHERE deleted_at IS NULL
+            AND (id = $2 OR id IN (
+              WITH RECURSIVE team AS (
+                SELECT id FROM users WHERE manager_id = $2 AND deleted_at IS NULL
+                UNION ALL
+                SELECT u.id FROM users u INNER JOIN team t ON u.manager_id = t.id
+                WHERE u.deleted_at IS NULL
+              )
+              SELECT id FROM team
+            ))
+            AND (full_name ILIKE $1 OR email ILIKE $1)
+          ORDER BY full_name ASC LIMIT 10
+        `
+            : `
+          SELECT id, email, full_name, role FROM users
+          WHERE deleted_at IS NULL
+            AND (full_name ILIKE $1 OR email ILIKE $1)
+          ORDER BY full_name ASC LIMIT 10
+        `,
+          isScoped ? [`%${q}%`, req.user.id] : [`%${q}%`]
         )
         .catch(() => ({ rows: [] })),
       pool
         .query(
-          `
-        SELECT id, name, status, health FROM projects
-        WHERE deleted_at IS NULL AND name ILIKE $1
-        ORDER BY updated_at DESC LIMIT 10
-      `,
-          [`%${q}%`]
+          isScoped
+            ? `
+          SELECT id, name, status, health FROM projects p
+          WHERE p.deleted_at IS NULL
+            AND (p.owner_id = $2 OR EXISTS (
+              SELECT 1 FROM project_members m WHERE m.project_id = p.id AND m.user_id = $2
+            ))
+            AND p.name ILIKE $1
+          ORDER BY p.updated_at DESC LIMIT 10
+        `
+            : `
+          SELECT id, name, status, health FROM projects
+          WHERE deleted_at IS NULL AND name ILIKE $1
+          ORDER BY updated_at DESC LIMIT 10
+        `,
+          isScoped ? [`%${q}%`, req.user.id] : [`%${q}%`]
         )
         .catch(() => ({ rows: [] })),
       pool
         .query(
-          `
-        SELECT t.id, t.title, t.status, p.name AS project_name
-        FROM project_tasks t JOIN projects p ON p.id = t.project_id
-        WHERE t.deleted_at IS NULL AND t.title ILIKE $1
-        ORDER BY t.created_at DESC LIMIT 10
-      `,
-          [`%${q}%`]
+          isScoped
+            ? `
+          SELECT t.id, t.title, t.status, p.name AS project_name
+          FROM project_tasks t JOIN projects p ON p.id = t.project_id
+          WHERE t.deleted_at IS NULL AND p.deleted_at IS NULL
+            AND (p.owner_id = $2 OR EXISTS (
+              SELECT 1 FROM project_members m WHERE m.project_id = p.id AND m.user_id = $2
+            ))
+            AND t.title ILIKE $1
+          ORDER BY t.created_at DESC LIMIT 10
+        `
+            : `
+          SELECT t.id, t.title, t.status, p.name AS project_name
+          FROM project_tasks t JOIN projects p ON p.id = t.project_id
+          WHERE t.deleted_at IS NULL AND p.deleted_at IS NULL
+            AND t.title ILIKE $1
+          ORDER BY t.created_at DESC LIMIT 10
+        `,
+          isScoped ? [`%${q}%`, req.user.id] : [`%${q}%`]
         )
         .catch(() => ({ rows: [] })),
     ]);
