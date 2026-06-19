@@ -223,7 +223,9 @@ describe('AI search scopes results by hierarchy', () => {
     });
     expect(selfRes.statusCode).toBe(200);
     const selfBody = JSON.parse(selfRes.body);
-    expect(selfBody.users.some((u) => u.email === 'aarav.intern@quintern.com')).toBe(true);
+    expect(
+      selfBody.users.some((u) => u.email === 'aarav.intern@quintern.com')
+    ).toBe(true);
 
     const userLeakRes = await app.inject({
       method: 'GET',
@@ -267,7 +269,9 @@ describe('AI search scopes results by hierarchy', () => {
     });
     expect(userRes.statusCode).toBe(200);
     const userBody = JSON.parse(userRes.body);
-    expect(userBody.users.some((u) => u.email === 'aarav.intern@quintern.com')).toBe(true);
+    expect(
+      userBody.users.some((u) => u.email === 'aarav.intern@quintern.com')
+    ).toBe(true);
 
     const taskRes = await app.inject({
       method: 'GET',
@@ -276,7 +280,9 @@ describe('AI search scopes results by hierarchy', () => {
     });
     expect(taskRes.statusCode).toBe(200);
     const taskBody = JSON.parse(taskRes.body);
-    expect(taskBody.tasks.some((t) => t.title === 'Set up Neon PostgreSQL 18')).toBe(true);
+    expect(
+      taskBody.tasks.some((t) => t.title === 'Set up Neon PostgreSQL 18')
+    ).toBe(true);
 
     const adminLeakRes = await app.inject({
       method: 'GET',
