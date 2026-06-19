@@ -11,6 +11,7 @@
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const config = require('../../config');
+const pool = require('../../config/db');
 
 let io = null;
 const connected = new Map(); // userId -> Set<socketId>
@@ -41,8 +42,7 @@ function attach(server) {
 
   io.use((socket, next) => {
     try {
-      const token =
-        socket.handshake.auth?.token || socket.handshake.query?.token;
+      const token = socket.handshake.auth?.token;
       if (!token) return next(new Error('unauthorized'));
       const payload = jwt.verify(token, config.jwt.secret);
       socket.user = {
@@ -75,8 +75,19 @@ function attach(server) {
     });
 
     // Client can subscribe to a department
-    socket.on('subscribe:department', (deptId) => {
+    socket.on('subscribe:department', async (deptId) => {
       if (typeof deptId === 'string' && /^[0-9a-f-]{36}$/i.test(deptId)) {
+        if (socket.user.role === 'ADMIN') {
+          socket.join(`dept:${deptId}`);
+          return socket.emit('subscribed', { room: `dept:${deptId}` });
+        }
+        const { rows } = await pool.query(
+          'SELECT department_id FROM users WHERE id = $1',
+          [socket.user.id]
+        );
+        if (!rows.length || rows[0].department_id !== deptId) {
+          return socket.emit('error', { message: 'Unauthorized department' });
+        }
         socket.join(`dept:${deptId}`);
         socket.emit('subscribed', { room: `dept:${deptId}` });
       }
