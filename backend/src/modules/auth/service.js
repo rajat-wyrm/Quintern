@@ -52,6 +52,10 @@ async function login(email, password, ip, userAgent) {
     await recordLoginAttempt(email, ip, false);
     throw new UnauthorizedError('Invalid credentials');
   }
+  if (!user.email_verified) {
+    await recordLoginAttempt(email, ip, false);
+    throw new UnauthorizedError('Email not verified');
+  }
   await recordLoginAttempt(email, ip, true);
   const access = generateAccessToken(user);
   const refresh = generateRefreshToken(user);

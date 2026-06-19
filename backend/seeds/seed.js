@@ -1,4 +1,4 @@
-﻿// =============================================================================
+// =============================================================================
 // Quintern · Comprehensive seed script (matches actual schema)
 // Creates full demo: one user per role + dept + project + tasks + meeting +
 // attendance + ratings + notifications. Idempotent on email.
@@ -139,7 +139,7 @@ async function ensureUser(c, u) {
   if (r.rowCount > 0) return { id: r.rows[0].id, created: false };
   const h = await hash(SEED_PASSWORD);
   const i = await c.query(
-    'INSERT INTO users (email, password_hash, role, full_name, phone) VALUES ($1,$2,$3,$4,$5) RETURNING id',
+    'INSERT INTO users (email, password_hash, role, full_name, phone, email_verified) VALUES ($1,$2,$3,$4,$5,TRUE) RETURNING id',
     [u.email, h, u.role, u.full_name, u.phone]
   );
   return { id: i.rows[0].id, created: true };
@@ -265,6 +265,9 @@ async function main() {
         `  ${created ? '✓' : '·'} ${u.role.padEnd(10)} ${u.email.padEnd(35)} → ${id}`
       );
     }
+    await c.query(
+      'UPDATE users SET email_verified = TRUE WHERE email_verified = FALSE'
+    );
 
     console.log('\n→ Hierarchy + departments');
     await setDepartment(

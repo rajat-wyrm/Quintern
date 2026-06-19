@@ -232,4 +232,64 @@ describe('Auth Integration Tests', () => {
       expect(res.statusCode).toBe(400);
     });
   });
+
+  // ---------- Email Verification Login Check (Issue #18) ----------
+  describe('Email Verification Enforcement (Issue #18)', () => {
+    let unverifiedUserEmail = 'unverified@quintern.com';
+    let unverifiedUserId;
+
+    beforeAll(async () => {
+      // Create an unverified user directly in the database
+      const pool = require('../../src/config/db');
+      const argon2 = require('argon2');
+      const hash = await argon2.hash('Quintern@2026');
+      const res = await pool.query(
+        `INSERT INTO users (email, password_hash, role, full_name, email_verified)
+         VALUES ($1, $2, 'INTERN', 'Unverified Intern', FALSE) RETURNING id`,
+        [unverifiedUserEmail, hash]
+      );
+      unverifiedUserId = res.rows[0].id;
+    });
+
+    afterAll(async () => {
+      // Clean up the unverified user
+      const pool = require('../../src/config/db');
+      await pool.query('DELETE FROM users WHERE id = $1', [unverifiedUserId]);
+    });
+
+    it('should reject login for an unverified user with 401', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        headers: {
+          'X-CSRF-Token': csrfToken,
+          'Content-Type': 'application/json',
+        },
+        payload: { email: unverifiedUserEmail, password: 'Quintern@2026' },
+      });
+      expect(res.statusCode).toBe(401);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('Email not verified');
+    });
+
+    it('should allow login after user is marked as verified', async () => {
+      const pool = require('../../src/config/db');
+      await pool.query('UPDATE users SET email_verified = TRUE WHERE id = $1', [
+        unverifiedUserId,
+      ]);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        headers: {
+          'X-CSRF-Token': csrfToken,
+          'Content-Type': 'application/json',
+        },
+        payload: { email: unverifiedUserEmail, password: 'Quintern@2026' },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.accessToken).toBeDefined();
+    });
+  });
 });
