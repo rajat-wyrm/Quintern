@@ -109,40 +109,6 @@ async function routes(fastify) {
     };
   });
   // Generic file upload — admins only, for proof attachments / documents
-<<<<<<< HEAD
- // Generic file upload — admins only, for proof attachments / documents
-fastify.post('/file', { preHandler: [auth, rbac('ADMIN', 'SENIOR_TL', 'TL', 'CAPTAIN')] }, async (req, reply) => {
-    const data = await req.file();
-    if (!data) return reply.status(400).send({ error: 'No file uploaded' });
-    if (!ALLOWED_MIME.has(data.mimetype)) {
-      return reply.status(400).send({ error: 'Unsupported file type' });
-    }
-    const buffer = await data.toBuffer();
-    if (buffer.length > MAX_BYTES) {
-      return reply.status(413).send({ error: 'File too large' });
-    }
-    const ext = detectImageExt(buffer);
-    if (!ext) {
-      return reply.status(400).send({
-        error: 'File content does not match a supported image format',
-      });
-    }
-    let url = null;
-    let publicId = null;
-    if (cloudinary.isConfigured()) {
-      try {
-        const result = await cloudinary.uploadBuffer(buffer, {
-          folder: `${config.cloudinary.folder}/files`,
-          publicId: `file_${crypto.randomBytes(8).toString('hex')}`,
-        });
-        url = result.url;
-        publicId = result.public_id;
-      } catch (e) {
-        req.log.warn(
-          { err: e.message },
-          'cloudinary upload failed, falling back to local'
-        );
-=======
   fastify.post(
     '/file',
     { preHandler: [auth, rbac('ADMIN', 'SENIOR_TL', 'TL', 'CAPTAIN')] },
@@ -151,7 +117,6 @@ fastify.post('/file', { preHandler: [auth, rbac('ADMIN', 'SENIOR_TL', 'TL', 'CAP
       if (!data) return reply.status(400).send({ error: 'No file uploaded' });
       if (!ALLOWED_MIME.has(data.mimetype)) {
         return reply.status(400).send({ error: 'Unsupported file type' });
->>>>>>> e16c4b34f87f673a238c99bc0aa2301e71cc0619
       }
       const buffer = await data.toBuffer();
       if (buffer.length > MAX_BYTES) {
