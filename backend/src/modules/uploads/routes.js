@@ -108,62 +108,64 @@ async function routes(fastify) {
       storage: cloudinary.isConfigured() ? 'cloudinary' : 'local',
     };
   });
-
   // Generic file upload — admins only, for proof attachments / documents
- // Generic file upload — admins only, for proof attachments / documents
-fastify.post('/file', { preHandler: [auth, rbac('ADMIN', 'SENIOR_TL', 'TL', 'CAPTAIN')] }, async (req, reply) => {
-    const data = await req.file();
-    if (!data) return reply.status(400).send({ error: 'No file uploaded' });
-    if (!ALLOWED_MIME.has(data.mimetype)) {
-      return reply.status(400).send({ error: 'Unsupported file type' });
-    }
-    const buffer = await data.toBuffer();
-    if (buffer.length > MAX_BYTES) {
-      return reply.status(413).send({ error: 'File too large' });
-    }
-    const ext = detectImageExt(buffer);
-    if (!ext) {
-      return reply.status(400).send({
-        error: 'File content does not match a supported image format',
-      });
-    }
-    let url = null;
-    let publicId = null;
-    if (cloudinary.isConfigured()) {
-      try {
-        const result = await cloudinary.uploadBuffer(buffer, {
-          folder: `${config.cloudinary.folder}/files`,
-          publicId: `file_${crypto.randomBytes(8).toString('hex')}`,
-        });
-        url = result.url;
-        publicId = result.public_id;
-      } catch (e) {
-        req.log.warn(
-          { err: e.message },
-          'cloudinary upload failed, falling back to local'
-        );
+  fastify.post(
+    '/file',
+    { preHandler: [auth, rbac('ADMIN', 'SENIOR_TL', 'TL', 'CAPTAIN')] },
+    async (req, reply) => {
+      const data = await req.file();
+      if (!data) return reply.status(400).send({ error: 'No file uploaded' });
+      if (!ALLOWED_MIME.has(data.mimetype)) {
+        return reply.status(400).send({ error: 'Unsupported file type' });
       }
+      const buffer = await data.toBuffer();
+      if (buffer.length > MAX_BYTES) {
+        return reply.status(413).send({ error: 'File too large' });
+      }
+      const ext = detectImageExt(buffer);
+      if (!ext) {
+        return reply.status(400).send({
+          error: 'File content does not match a supported image format',
+        });
+      }
+      let url = null;
+      let publicId = null;
+      if (cloudinary.isConfigured()) {
+        try {
+          const result = await cloudinary.uploadBuffer(buffer, {
+            folder: `${config.cloudinary.folder}/files`,
+            publicId: `file_${crypto.randomBytes(8).toString('hex')}`,
+          });
+          url = result.url;
+          publicId = result.public_id;
+        } catch (e) {
+          req.log.warn(
+            { err: e.message },
+            'cloudinary upload failed, falling back to local'
+          );
+        }
+      }
+      if (!url) {
+        const fileName = `file_${crypto.randomBytes(8).toString('hex')}${ext}`;
+        const uploadPath = path.join(
+          __dirname,
+          '..',
+          '..',
+          '..',
+          config.uploadDir
+        );
+        await fsp.mkdir(uploadPath, { recursive: true });
+        await fsp.writeFile(path.join(uploadPath, fileName), buffer);
+        url = `/api/uploads/file/${fileName}`;
+      }
+      return {
+        success: true,
+        url,
+        public_id: publicId,
+        storage: cloudinary.isConfigured() ? 'cloudinary' : 'local',
+      };
     }
-    if (!url) {
-      const fileName = `file_${crypto.randomBytes(8).toString('hex')}${ext}`;
-      const uploadPath = path.join(
-        __dirname,
-        '..',
-        '..',
-        '..',
-        config.uploadDir
-      );
-      await fsp.mkdir(uploadPath, { recursive: true });
-      await fsp.writeFile(path.join(uploadPath, fileName), buffer);
-      url = `/api/uploads/file/${fileName}`;
-    }
-    return {
-      success: true,
-      url,
-      public_id: publicId,
-      storage: cloudinary.isConfigured() ? 'cloudinary' : 'local',
-    };
-  });
+  );
 
   // Authenticated file download. Previously served publicly at /uploads/*,
   // which is a privacy leak (avatars guessed by filename). Same-origin
