@@ -18,6 +18,9 @@ export default function SocketBridge() {
       const t = e.detail;
       if (t?.type === 'login' && t.accessToken) {
         rt.connect(t.accessToken);
+      } else if (t?.type === 'refresh' && t.accessToken) {
+        rt.disconnect();
+        rt.connect(t.accessToken);
       } else if (t?.type === 'logout') {
         rt.disconnect();
       }
