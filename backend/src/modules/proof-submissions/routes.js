@@ -91,7 +91,7 @@ async function routes(fastify) {
       if (req.user.role !== 'ADMIN') {
         const allowed = await checkHierarchyAccess(
           req.user.id,
-          proof.intern_id
+          proof.intern_id,
         );
         if (!allowed)
           return reply.status(403).send({ error: 'Not in your hierarchy' });
@@ -125,6 +125,7 @@ async function routes(fastify) {
         const ownsTask = await checkHierarchyAccess(
           req.user.id,
           task.created_by
+
         );
         if (!ownsTask)
           return reply

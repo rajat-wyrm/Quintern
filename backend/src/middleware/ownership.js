@@ -10,7 +10,7 @@ function ownership(paramName = 'id') {
       return reply.status(400).send({ error: 'Invalid UUID' });
     }
     if (request.user.role === 'ADMIN') return; // admin bypass
-    const ok = await checkHierarchyAccess(request.user.id, target);
+    const ok = await checkHierarchyAccess(req.user.id, user_id);
     if (!ok) return reply.status(403).send({ error: 'Not in your hierarchy' });
   };
 }

@@ -226,11 +226,11 @@ export default function Tasks() {
                         </p>
                       )}
                       <div className="flex items-center gap-3 mt-2 text-xs text-fg-muted">
-                        {t.task_link && (
+                        {t.task_link && /^https?:\/\//i.test(t.task_link) && (
                           <a
                             href={t.task_link}
                             target="_blank"
-                            rel="noreferrer"
+                            rel="noreferrer noopener"
                             className="text-brand-600 hover:underline"
                           >
                             Task link ↗

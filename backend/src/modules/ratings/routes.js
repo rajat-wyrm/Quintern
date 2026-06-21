@@ -55,7 +55,7 @@ module.exports = async function ratingsRoutes(fastify) {
       // directManager middleware above already validated the strict SRS step,
       // so this is just belt-and-braces.
       if (req.user.role !== 'ADMIN') {
-        const ok = await checkHierarchyAccess(req.user.id, rated_user_id);
+        const ok = await checkHierarchyAccess(req.user.id, user_id);
         if (!ok)
           return reply
             .status(403)

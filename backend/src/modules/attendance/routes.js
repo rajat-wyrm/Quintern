@@ -63,7 +63,7 @@ async function routes(fastify) {
       const { user_id, date, status, remarks } = parsed.data;
 
       if (req.user.role !== 'ADMIN') {
-        const ok = await checkHierarchyAccess(req.user.id, user_id);
+        const ok = await checkHierarchyAccess(req.user.id, user_id,req.user.role);
         if (!ok)
           return reply
             .status(403)
