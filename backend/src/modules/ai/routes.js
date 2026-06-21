@@ -78,40 +78,108 @@ async function routes(fastify) {
   fastify.get('/search', { preHandler: [auth] }, async (req) => {
     const q = String(req.query.q || '').trim();
     if (!q) return { users: [], projects: [], tasks: [] };
+
+    const role = req.user.role;
+    let accessibleUserIds = null;
+
+    if (role !== 'ADMIN' && role !== 'SENIOR_TL') {
+      if (role === 'INTERN') {
+        accessibleUserIds = [req.user.id];
+      } else {
+        // TL / CAPTAIN
+        const { rows } = await pool.query(
+          `WITH RECURSIVE accessible_users AS (
+            SELECT id FROM users WHERE id = $1 AND deleted_at IS NULL
+            UNION ALL
+            SELECT u.id FROM users u INNER JOIN accessible_users au ON u.manager_id = au.id
+            WHERE u.deleted_at IS NULL
+          ) SELECT id FROM accessible_users`,
+          [req.user.id]
+        );
+        accessibleUserIds = rows.map((r) => r.id);
+      }
+    }
+
+    const queryParams = [`%${q}%`];
+    if (accessibleUserIds) {
+      queryParams.push(accessibleUserIds);
+    }
+
+    // Query 1: Users
+    let usersQuery = `
+      SELECT id, email, full_name, role FROM users
+      WHERE deleted_at IS NULL
+        AND (full_name ILIKE $1 OR email ILIKE $1)
+    `;
+    if (accessibleUserIds) {
+      usersQuery += ` AND id = ANY($2::uuid[])`;
+    }
+    usersQuery += ` ORDER BY full_name ASC LIMIT 10`;
+
+    // Query 2: Projects
+    let projectsQuery = `
+      SELECT p.id, p.name, p.status, p.health
+      FROM projects p
+      WHERE p.deleted_at IS NULL
+        AND p.name ILIKE $1
+    `;
+    if (accessibleUserIds) {
+      if (role === 'INTERN') {
+        projectsQuery += `
+          AND EXISTS (
+            SELECT 1 FROM project_members pm
+            WHERE pm.project_id = p.id AND pm.user_id = ANY($2::uuid[])
+          )
+        `;
+      } else {
+        // TL / CAPTAIN
+        projectsQuery += `
+          AND (
+            p.owner_id = ANY($2::uuid[])
+            OR EXISTS (
+              SELECT 1 FROM project_members pm
+              WHERE pm.project_id = p.id AND pm.user_id = ANY($2::uuid[])
+            )
+          )
+        `;
+      }
+    }
+    projectsQuery += ` ORDER BY p.updated_at DESC LIMIT 10`;
+
+    // Query 3: Tasks
+    let tasksQuery = `
+      SELECT t.id, t.title, t.status, p.name AS project_name
+      FROM project_tasks t
+      JOIN projects p ON p.id = t.project_id
+      WHERE t.deleted_at IS NULL
+        AND p.deleted_at IS NULL
+        AND t.title ILIKE $1
+    `;
+    if (accessibleUserIds) {
+      if (role === 'INTERN') {
+        tasksQuery += ` AND t.assignee_id = ANY($2::uuid[])`;
+      } else {
+        // TL / CAPTAIN
+        tasksQuery += `
+          AND (
+            t.assignee_id = ANY($2::uuid[])
+            OR p.owner_id = ANY($2::uuid[])
+            OR EXISTS (
+              SELECT 1 FROM project_members pm
+              WHERE pm.project_id = p.id AND pm.user_id = ANY($2::uuid[])
+            )
+          )
+        `;
+      }
+    }
+    tasksQuery += ` ORDER BY t.created_at DESC LIMIT 10`;
+
     const [users, projects, tasks] = await Promise.all([
-      pool
-        .query(
-          `
-        SELECT id, email, full_name, role FROM users
-        WHERE deleted_at IS NULL
-          AND (full_name ILIKE $1 OR email ILIKE $1)
-        ORDER BY full_name ASC LIMIT 10
-      `,
-          [`%${q}%`]
-        )
-        .catch(() => ({ rows: [] })),
-      pool
-        .query(
-          `
-        SELECT id, name, status, health FROM projects
-        WHERE deleted_at IS NULL AND name ILIKE $1
-        ORDER BY updated_at DESC LIMIT 10
-      `,
-          [`%${q}%`]
-        )
-        .catch(() => ({ rows: [] })),
-      pool
-        .query(
-          `
-        SELECT t.id, t.title, t.status, p.name AS project_name
-        FROM project_tasks t JOIN projects p ON p.id = t.project_id
-        WHERE t.deleted_at IS NULL AND t.title ILIKE $1
-        ORDER BY t.created_at DESC LIMIT 10
-      `,
-          [`%${q}%`]
-        )
-        .catch(() => ({ rows: [] })),
+      pool.query(usersQuery, queryParams).catch(() => ({ rows: [] })),
+      pool.query(projectsQuery, queryParams).catch(() => ({ rows: [] })),
+      pool.query(tasksQuery, queryParams).catch(() => ({ rows: [] })),
     ]);
+
     return { users: users.rows, projects: projects.rows, tasks: tasks.rows };
   });
 

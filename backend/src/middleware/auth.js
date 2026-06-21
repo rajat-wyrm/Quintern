@@ -1,4 +1,5 @@
 const { verifyAccessToken, verifyRefreshToken } = require('../utils/tokens');
+const pool = require('../config/db');
 
 async function authMiddleware(request, reply) {
   const auth = request.headers.authorization;
@@ -18,6 +19,13 @@ async function authMiddleware(request, reply) {
 
   try {
     const decoded = verifyAccessToken(token);
+    const { rows } = await pool.query(
+      'SELECT suspended FROM users WHERE id = $1',
+      [decoded.id]
+    );
+    if (rows[0]?.suspended) {
+      return reply.status(401).send({ error: 'Account suspended' });
+    }
     request.user = decoded;
   } catch {
     return reply.status(401).send({ error: 'Invalid token' });

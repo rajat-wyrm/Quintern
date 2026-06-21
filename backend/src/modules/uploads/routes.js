@@ -108,61 +108,64 @@ async function routes(fastify) {
       storage: cloudinary.isConfigured() ? 'cloudinary' : 'local',
     };
   });
-
   // Generic file upload — admins only, for proof attachments / documents
-  fastify.post('/file', { preHandler: [auth] }, async (req, reply) => {
-    const data = await req.file();
-    if (!data) return reply.status(400).send({ error: 'No file uploaded' });
-    if (!ALLOWED_MIME.has(data.mimetype)) {
-      return reply.status(400).send({ error: 'Unsupported file type' });
-    }
-    const buffer = await data.toBuffer();
-    if (buffer.length > MAX_BYTES) {
-      return reply.status(413).send({ error: 'File too large' });
-    }
-    const ext = detectImageExt(buffer);
-    if (!ext) {
-      return reply.status(400).send({
-        error: 'File content does not match a supported image format',
-      });
-    }
-    let url = null;
-    let publicId = null;
-    if (cloudinary.isConfigured()) {
-      try {
-        const result = await cloudinary.uploadBuffer(buffer, {
-          folder: `${config.cloudinary.folder}/files`,
-          publicId: `file_${crypto.randomBytes(8).toString('hex')}`,
-        });
-        url = result.url;
-        publicId = result.public_id;
-      } catch (e) {
-        req.log.warn(
-          { err: e.message },
-          'cloudinary upload failed, falling back to local'
-        );
+  fastify.post(
+    '/file',
+    { preHandler: [auth, rbac('ADMIN', 'SENIOR_TL', 'TL', 'CAPTAIN')] },
+    async (req, reply) => {
+      const data = await req.file();
+      if (!data) return reply.status(400).send({ error: 'No file uploaded' });
+      if (!ALLOWED_MIME.has(data.mimetype)) {
+        return reply.status(400).send({ error: 'Unsupported file type' });
       }
+      const buffer = await data.toBuffer();
+      if (buffer.length > MAX_BYTES) {
+        return reply.status(413).send({ error: 'File too large' });
+      }
+      const ext = detectImageExt(buffer);
+      if (!ext) {
+        return reply.status(400).send({
+          error: 'File content does not match a supported image format',
+        });
+      }
+      let url = null;
+      let publicId = null;
+      if (cloudinary.isConfigured()) {
+        try {
+          const result = await cloudinary.uploadBuffer(buffer, {
+            folder: `${config.cloudinary.folder}/files`,
+            publicId: `file_${crypto.randomBytes(8).toString('hex')}`,
+          });
+          url = result.url;
+          publicId = result.public_id;
+        } catch (e) {
+          req.log.warn(
+            { err: e.message },
+            'cloudinary upload failed, falling back to local'
+          );
+        }
+      }
+      if (!url) {
+        const fileName = `file_${crypto.randomBytes(8).toString('hex')}${ext}`;
+        const uploadPath = path.join(
+          __dirname,
+          '..',
+          '..',
+          '..',
+          config.uploadDir
+        );
+        await fsp.mkdir(uploadPath, { recursive: true });
+        await fsp.writeFile(path.join(uploadPath, fileName), buffer);
+        url = `/api/uploads/file/${fileName}`;
+      }
+      return {
+        success: true,
+        url,
+        public_id: publicId,
+        storage: cloudinary.isConfigured() ? 'cloudinary' : 'local',
+      };
     }
-    if (!url) {
-      const fileName = `file_${crypto.randomBytes(8).toString('hex')}${ext}`;
-      const uploadPath = path.join(
-        __dirname,
-        '..',
-        '..',
-        '..',
-        config.uploadDir
-      );
-      await fsp.mkdir(uploadPath, { recursive: true });
-      await fsp.writeFile(path.join(uploadPath, fileName), buffer);
-      url = `/api/uploads/file/${fileName}`;
-    }
-    return {
-      success: true,
-      url,
-      public_id: publicId,
-      storage: cloudinary.isConfigured() ? 'cloudinary' : 'local',
-    };
-  });
+  );
 
   // Authenticated file download. Previously served publicly at /uploads/*,
   // which is a privacy leak (avatars guessed by filename). Same-origin
@@ -170,7 +173,10 @@ async function routes(fastify) {
   fastify.get('/file/:filename', { preHandler: [auth] }, async (req, reply) => {
     // Strict filename guard: no path separators, no traversal, known prefix.
     const safe = path.basename(req.params.filename);
-    if (!/^avatar_[a-f0-9-]+_[a-f0-9]{16}\.(png|jpg|gif|webp)$/.test(safe)) {
+    if (
+      !/^avatar_[a-f0-9-]+_[a-f0-9]{16}\.(png|jpg|gif|webp)$/.test(safe) &&
+      !/^file_[a-f0-9]{16}\.(png|jpg|gif|webp)$/.test(safe)
+    ) {
       return reply.status(400).send({ error: 'Invalid filename' });
     }
     const uploadPath = path.join(__dirname, '..', '..', '..', config.uploadDir);
@@ -194,7 +200,13 @@ async function routes(fastify) {
         webp: 'image/webp',
       }[ext] || 'application/octet-stream';
     reply.header('Content-Type', mime);
+    reply.header('Content-Disposition', `inline; filename="${safe}"`);
+    reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('Cache-Control', 'private, max-age=300');
+    // nosemgrep: javascript.express.security.audit.express-path-join-resolve-traversal.express-path-join-resolve-traversal
+    // nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write
+    // Path traversal is blocked above (path.basename + regex whitelist + path.relative containment).
+    // XSS is blocked by: strict filename regex, extension-derived MIME, and X-Content-Type-Options: nosniff.
     return reply.send(fs.createReadStream(filePath));
   });
 }

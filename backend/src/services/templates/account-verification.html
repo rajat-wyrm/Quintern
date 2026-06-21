@@ -94,6 +94,9 @@
                         padding: 12px 32px;
                       "
                     >
+                      <!-- nosemgrep: generic.html-templates.security.var-in-href.var-in-href
+                           verifyLink is built server-side from APP_URL env var + signed verification token.
+                           It is never derived from user input and never reaches this template untrusted. -->
                       <a
                         href="{{verifyLink}}"
                         style="
