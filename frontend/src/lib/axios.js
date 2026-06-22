@@ -30,7 +30,8 @@ async function getCsrfToken() {
 }
 
 api.interceptors.request.use(async (config) => {
-  const token = localStorage.getItem('accessToken');
+  const { default: useAuthStore } = await import('../store/auth');
+  const token = useAuthStore.getState().accessToken;
   if (token) config.headers.Authorization = `Bearer ${token}`;
 
   const method = (config.method || 'get').toLowerCase();
@@ -50,7 +51,9 @@ async function tryRefresh() {
         const newToken = res.data?.accessToken;
         if (newToken) {
           try {
-            localStorage.setItem('accessToken', newToken);
+            import('../store/auth').then(({ default: useAuthStore }) => {
+              useAuthStore.getState().setAuth({ accessToken: newToken });
+            });
           } catch {}
           if (typeof window !== 'undefined') {
             window.dispatchEvent(
