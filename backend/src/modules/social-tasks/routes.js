@@ -19,7 +19,13 @@ module.exports = async function socialTasksRoutes(fastify) {
         title: z.string().min(1).max(255),
         description: z.string().max(2000).optional(),
         targetPlatform: z.string().max(100).optional(),
-        taskLink: z.string().max(500).optional(),
+        taskLink: z
+          .string()
+          .max(500)
+          .refine((url) => !url || /^https?:\/\//i.test(url), {
+            message: 'taskLink must be a valid http or https URL',
+          })
+          .optional(),
         deadline: z
           .string()
           .regex(/^\d{4}-\d{2}-\d{2}$/, 'deadline must be YYYY-MM-DD')
