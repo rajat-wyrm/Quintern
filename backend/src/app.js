@@ -1,6 +1,8 @@
 require('dotenv').config();
 const validateEnv = require('./config/validateEnv');
 validateEnv();
+const auth = require('./middleware/auth');
+const rbac = require('./middleware/rbac');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const Fastify = require('fastify');
@@ -73,9 +75,11 @@ app.register(require('@fastify/swagger'), {
   },
 });
 
-app.register(require('@fastify/swagger-ui'), {
-  routePrefix: '/docs',
-});
+if (process.env.NODE_ENV !== 'production') {
+  app.register(require('@fastify/swagger-ui'), {
+    routePrefix: '/docs',
+  });
+}
 
 app.register(require('./modules/auth/routes'), {
   prefix: '/api/auth',
@@ -171,9 +175,11 @@ app.get('/api/realtime/stats', async (req, reply) => {
   }
 });
 
-app.get('/', async (req, reply) => {
-  reply.redirect('/docs');
-});
+if (process.env.NODE_ENV !== 'production') {
+  app.get('/', async (req, reply) => {
+    reply.redirect('/docs');
+  });
+}
 
 app.get('/fallback', async (req, reply) => {
   reply.type('text/html').send(`
@@ -186,7 +192,11 @@ app.get('/fallback', async (req, reply) => {
   `);
 });
 
-app.get('/metrics', metrics.metricsEndpoint);
+app.get(
+  '/metrics',
+  { preHandler: [auth, rbac('ADMIN')] },
+  metrics.metricsEndpoint
+);
 
 app.get('/health', async (req, reply) => {
   // Liveness: DB is the hard requirement. Redis is a soft optimization —
