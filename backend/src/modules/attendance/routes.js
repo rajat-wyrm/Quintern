@@ -1,4 +1,4 @@
-﻿const { notifyUser } = require('../../websocket');
+const { notifyUser } = require('../../websocket');
 const { z } = require('zod');
 const auth = require('../../middleware/auth');
 const direct = require('../../middleware/directManager');
@@ -63,7 +63,7 @@ async function routes(fastify) {
       const { user_id, date, status, remarks } = parsed.data;
 
       if (req.user.role !== 'ADMIN') {
-        const ok = await checkHierarchyAccess(req.user.id, user_id);
+        const ok = await checkHierarchyAccess(req.user.id, user_id, req.user.role);
         if (!ok)
           return reply
             .status(403)
@@ -116,23 +116,17 @@ async function routes(fastify) {
 
       // Hierarchy check: every target must be in the requester's tree.
       if (req.user.role !== 'ADMIN') {
-        // Single query that returns the set of all valid targets; cheaper than
-        // a checkHierarchyAccess call per entry.
-        const { rows: valid } = await require('../../config/db').query(
-          `WITH RECURSIVE team AS (
-           SELECT id FROM users WHERE manager_id = $1 AND deleted_at IS NULL
-           UNION ALL
-           SELECT u.id FROM users u INNER JOIN team t ON u.manager_id = t.id
-           WHERE u.deleted_at IS NULL
-         ) SELECT id FROM team`,
-          [req.user.id]
-        );
-        const validSet = new Set(valid.map((r) => r.id));
         for (const e of entries) {
-          if (!validSet.has(e.user_id)) {
-            return reply
-              .status(403)
-              .send({ error: 'A selected member is not in your hierarchy' });
+          const ok = await checkHierarchyAccess(
+            req.user.id,
+            e.user_id,
+            req.user.role
+          );
+          if (!ok) {
+            return reply.status(403).send({
+              error: 'A selected member is not in your hierarchy',
+              detail: `User ${e.user_id} is outside your direct-report depth limit`,
+            });
           }
         }
       }
