@@ -292,4 +292,100 @@ describe('Auth Integration Tests', () => {
       expect(body.accessToken).toBeDefined();
     });
   });
+
+  // ---------- Password Session Revocation (Issue #30) ----------
+  describe('Password Session Revocation (Issue #30)', () => {
+    let testUserEmail = 'session.revoke.test@quintern.com';
+    let testUserId;
+    let oldRefreshToken, testAccessToken;
+
+    beforeEach(async () => {
+      const pool = require('../../src/config/db');
+      const argon2 = require('argon2');
+      const hash = await argon2.hash('OldPassword123!');
+      const res = await pool.query(
+        `INSERT INTO users (email, password_hash, role, full_name, email_verified)
+         VALUES ($1, $2, 'INTERN', 'Session Revoke Test User', TRUE) RETURNING id`,
+        [testUserEmail, hash]
+      );
+      testUserId = res.rows[0].id;
+
+      // Log in to get access token and refresh token
+      const loginRes = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        headers: {
+          'X-CSRF-Token': csrfToken,
+          'Content-Type': 'application/json',
+        },
+        payload: { email: testUserEmail, password: 'OldPassword123!' },
+      });
+      expect(loginRes.statusCode).toBe(200);
+      const body = JSON.parse(loginRes.body);
+      testAccessToken = body.accessToken;
+      oldRefreshToken = body.refreshToken;
+    });
+
+    afterEach(async () => {
+      const pool = require('../../src/config/db');
+      await pool.query('DELETE FROM users WHERE id = $1', [testUserId]);
+    });
+
+    it('should revoke all existing refresh tokens when user changes password', async () => {
+      // Change password via PATCH /api/users/me/password
+      const changeRes = await app.inject({
+        method: 'PATCH',
+        url: '/api/users/me/password',
+        headers: {
+          Authorization: `Bearer ${testAccessToken}`,
+          'X-CSRF-Token': csrfToken,
+          'Content-Type': 'application/json',
+        },
+        payload: { oldPassword: 'OldPassword123!', newPassword: 'NewPassword123!' },
+      });
+      expect(changeRes.statusCode).toBe(200);
+
+      // Attempt to refresh using the old refresh token
+      const refreshRes = await app.inject({
+        method: 'POST',
+        url: '/api/auth/refresh',
+        headers: {
+          'X-CSRF-Token': csrfToken,
+          'Content-Type': 'application/json',
+        },
+        payload: { refreshToken: oldRefreshToken },
+      });
+      expect(refreshRes.statusCode).toBe(401);
+    });
+
+    it('should revoke all existing refresh tokens when user resets password', async () => {
+      // Create reset token
+      const resetRepo = require('../../src/modules/auth/resetRepository');
+      const resetToken = await resetRepo.createResetToken(testUserId);
+
+      // Reset password via POST /api/auth/reset-password
+      const resetRes = await app.inject({
+        method: 'POST',
+        url: '/api/auth/reset-password',
+        headers: {
+          'X-CSRF-Token': csrfToken,
+          'Content-Type': 'application/json',
+        },
+        payload: { token: resetToken, newPassword: 'ResetPassword123!' },
+      });
+      expect(resetRes.statusCode).toBe(200);
+
+      // Attempt to refresh using the old refresh token
+      const refreshRes = await app.inject({
+        method: 'POST',
+        url: '/api/auth/refresh',
+        headers: {
+          'X-CSRF-Token': csrfToken,
+          'Content-Type': 'application/json',
+        },
+        payload: { refreshToken: oldRefreshToken },
+      });
+      expect(refreshRes.statusCode).toBe(401);
+    });
+  });
 });
