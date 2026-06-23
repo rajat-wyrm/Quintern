@@ -1,4 +1,4 @@
-﻿const auth = require('../../middleware/auth');
+const auth = require('../../middleware/auth');
 const rbac = require('../../middleware/rbac');
 const ownership = require('../../middleware/ownership');
 const repo = require('./repository');
@@ -100,6 +100,7 @@ async function routes(fastify) {
       return reply.status(400).send({ error: 'Current password is incorrect' });
     const newHash = await argon2.hash(newPassword);
     await authRepo.updatePassword(req.user.id, newHash);
+    await authRepo.revokeAllUserTokensRedis(req.user.id);
     await createAuditLog({
       userId: req.user.id,
       action: 'PASSWORD_CHANGED',

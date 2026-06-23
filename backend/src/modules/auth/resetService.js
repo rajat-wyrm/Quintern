@@ -24,6 +24,7 @@ async function resetPassword(token, newPassword, requestInfo) {
   const record = await repo.verifyResetToken(token);
   if (!record) throw new BadRequestError('Invalid or expired reset token');
   await repo.updateUserPassword(record.user_id, newPassword);
+  await userRepo.revokeAllUserTokensRedis(record.user_id);
   await repo.markTokenUsed(token);
   await createAuditLog({
     userId: record.user_id,
