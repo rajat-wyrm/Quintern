@@ -333,3 +333,112 @@ describe('Attendance bulk audit log records all dates', () => {
     });
   });
 });
+
+describe('Attendance bulk hierarchy depth enforcement (issue #33)', () => {
+  let captainToken, tlToken, seniorTlToken;
+  let internId, captainId, tlId, seniorTlId;
+
+  beforeAll(async () => {
+    // Get user IDs from the database using emails from the seed
+    const { rows: users } = await pool.query(
+      "SELECT id, email, role FROM users WHERE email IN ('priya.senior@quintern.com', 'neha.tl@quintern.com', 'vikram.cap@quintern.com', 'aarav.intern@quintern.com')"
+    );
+    const userMap = {};
+    for (const u of users) {
+      userMap[u.email] = u;
+    }
+    seniorTlId = userMap['priya.senior@quintern.com'].id;
+    tlId = userMap['neha.tl@quintern.com'].id;
+    captainId = userMap['vikram.cap@quintern.com'].id;
+    internId = userMap['aarav.intern@quintern.com'].id;
+
+    // Login to get tokens
+    captainToken = await loginAs('vikram.cap@quintern.com');
+    tlToken = await loginAs('neha.tl@quintern.com');
+    seniorTlToken = await loginAs('priya.senior@quintern.com');
+  });
+
+  it('allows Captain to bulk mark direct Intern (depth 2)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/attendance/bulk',
+      headers: {
+        Authorization: `Bearer ${captainToken}`,
+        'X-CSRF-Token': csrfToken,
+        'Content-Type': 'application/json',
+      },
+      payload: {
+        entries: [{ user_id: internId, date: '2026-06-20', status: 'PRESENT' }],
+      },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('allows TL to bulk mark indirect Intern (depth 3)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/attendance/bulk',
+      headers: {
+        Authorization: `Bearer ${tlToken}`,
+        'X-CSRF-Token': csrfToken,
+        'Content-Type': 'application/json',
+      },
+      payload: {
+        entries: [{ user_id: internId, date: '2026-06-20', status: 'PRESENT' }],
+      },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('allows Senior TL to bulk mark indirect Intern (depth 4)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/attendance/bulk',
+      headers: {
+        Authorization: `Bearer ${seniorTlToken}`,
+        'X-CSRF-Token': csrfToken,
+        'Content-Type': 'application/json',
+      },
+      payload: {
+        entries: [{ user_id: internId, date: '2026-06-20', status: 'PRESENT' }],
+      },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('rejects bulk marking when user is beyond the depth limit (depth 5)', async () => {
+    // Create a deep subordinate who reports to aarav.intern
+    const { rows: inserted } = await pool.query(
+      `INSERT INTO users (email, password_hash, role, full_name, phone, manager_id)
+       VALUES ('deep.subordinate@quintern.com', 'hash', 'INTERN', 'Deep Subordinate', '+91-9000000999', $1)
+       RETURNING id`,
+      [internId]
+    );
+    const deepSubordinateId = inserted[0].id;
+
+    try {
+      // Senior TL (priya.senior) attempts to mark attendance for deepSubordinate (depth 5)
+      // chain: deepSubordinate (1) -> aarav.intern (2) -> vikram.cap (3) -> neha.tl (4) -> priya.senior (5)
+      // depth 5 > MAX_CHAIN_DEPTH[SENIOR_TL] (4) -> should be rejected!
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/attendance/bulk',
+        headers: {
+          Authorization: `Bearer ${seniorTlToken}`,
+          'X-CSRF-Token': csrfToken,
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          entries: [{ user_id: deepSubordinateId, date: '2026-06-20', status: 'PRESENT' }],
+        },
+      });
+      expect(res.statusCode).toBe(403);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('A selected member is not in your hierarchy');
+      expect(body.detail).toBe(`User ${deepSubordinateId} is outside your direct-report depth limit`);
+    } finally {
+      // Clean up the deep subordinate
+      await pool.query('DELETE FROM users WHERE id = $1', [deepSubordinateId]);
+    }
+  });
+});
