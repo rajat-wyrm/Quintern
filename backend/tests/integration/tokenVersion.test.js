@@ -1,19 +1,25 @@
-process.env.JWT_SECRET = 'a-strong-secret-of-sufficient-length-for-testing-purpose-only';
-process.env.JWT_ACCESS_SECRET = 'a-strong-secret-of-sufficient-length-for-testing-purpose-only-access';
-process.env.JWT_REFRESH_SECRET = 'a-strong-secret-of-sufficient-length-for-testing-purpose-only-refresh';
+process.env.JWT_SECRET =
+  'a-strong-secret-of-sufficient-length-for-testing-purpose-only';
+process.env.JWT_ACCESS_SECRET =
+  'a-strong-secret-of-sufficient-length-for-testing-purpose-only-access';
+process.env.JWT_REFRESH_SECRET =
+  'a-strong-secret-of-sufficient-length-for-testing-purpose-only-refresh';
 
-const { generateAccessToken, generateRefreshToken } = require('../../src/utils/tokens');
+const {
+  generateAccessToken,
+  generateRefreshToken,
+} = require('../../src/utils/tokens');
 const authMiddleware = require('../../src/middleware/auth');
 
 // Mock the db pool
 const mockQuery = jest.fn();
 jest.mock('../../src/config/db', () => ({
-  query: (...args) => mockQuery(...args)
+  query: (...args) => mockQuery(...args),
 }));
 
 // Mock the redis client
 jest.mock('../../src/config/redis', () => ({
-  getRedisClient: jest.fn().mockResolvedValue(null) // Mock fallback to PG
+  getRedisClient: jest.fn().mockResolvedValue(null), // Mock fallback to PG
 }));
 
 const mockReply = () => {
@@ -27,7 +33,7 @@ const mockReply = () => {
     send: (obj) => {
       res.body = obj;
       return res;
-    }
+    },
   };
   return res;
 };
@@ -77,14 +83,14 @@ describe('Token Version Revocation Unit Tests', () => {
       const token = generateAccessToken(user);
       const req = {
         headers: {
-          authorization: `Bearer ${token}`
-        }
+          authorization: `Bearer ${token}`,
+        },
       };
       const reply = mockReply();
 
       // Database returns matching token_version
       mockQuery.mockResolvedValue({
-        rows: [{ suspended: false, token_version: 2 }]
+        rows: [{ suspended: false, token_version: 2 }],
       });
 
       await authMiddleware(req, reply);
@@ -104,14 +110,14 @@ describe('Token Version Revocation Unit Tests', () => {
       const token = generateAccessToken(user);
       const req = {
         headers: {
-          authorization: `Bearer ${token}`
-        }
+          authorization: `Bearer ${token}`,
+        },
       };
       const reply = mockReply();
 
       // Database returns newer token_version
       mockQuery.mockResolvedValue({
-        rows: [{ suspended: false, token_version: 3 }]
+        rows: [{ suspended: false, token_version: 3 }],
       });
 
       await authMiddleware(req, reply);
@@ -126,13 +132,13 @@ describe('Token Version Revocation Unit Tests', () => {
       const token = generateAccessToken(user);
       const req = {
         headers: {
-          authorization: `Bearer ${token}`
-        }
+          authorization: `Bearer ${token}`,
+        },
       };
       const reply = mockReply();
 
       mockQuery.mockResolvedValue({
-        rows: [{ suspended: true, token_version: 2 }]
+        rows: [{ suspended: true, token_version: 2 }],
       });
 
       await authMiddleware(req, reply);
@@ -146,13 +152,13 @@ describe('Token Version Revocation Unit Tests', () => {
       const token = generateAccessToken(user);
       const req = {
         headers: {
-          authorization: `Bearer ${token}`
-        }
+          authorization: `Bearer ${token}`,
+        },
       };
       const reply = mockReply();
 
       mockQuery.mockResolvedValue({
-        rows: []
+        rows: [],
       });
 
       await authMiddleware(req, reply);
