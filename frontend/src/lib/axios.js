@@ -29,14 +29,14 @@ async function getCsrfToken() {
   return csrfToken;
 }
 
+<<<<<<< HEAD
 api.interceptors.request.use(async (config) => {
   const token = localStorage.getItem('accessToken');
+=======
+api.interceptors.request.use((config) => {
+  const token = useAuthStore.getState().accessToken;
+>>>>>>> 217851c (refactor(auth): move access token to zustand memory store)
   if (token) config.headers.Authorization = `Bearer ${token}`;
-
-  const method = (config.method || 'get').toLowerCase();
-  if (!['get', 'head', 'options'].includes(method)) {
-    config.headers['X-CSRF-Token'] = await getCsrfToken();
-  }
   return config;
 });
 
@@ -86,9 +86,7 @@ api.interceptors.response.use(
 
     if (err.response?.status === 401) {
       clearCsrf();
-      try {
-        localStorage.removeItem('accessToken');
-      } catch {}
+      
       try {
         localStorage.removeItem('user');
       } catch {}

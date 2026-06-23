@@ -24,9 +24,7 @@ export default class ErrorBoundary extends Component {
   handleReset = () => {
     this.setState({ error: null, info: null });
     if (typeof window !== 'undefined') {
-      try {
-        window.localStorage.removeItem('accessToken');
-      } catch {}
+      
       try {
         window.localStorage.removeItem('user');
       } catch {}

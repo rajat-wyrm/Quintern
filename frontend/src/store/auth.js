@@ -10,32 +10,12 @@ function readUser() {
   }
 }
 
-const useAuthStore = create((set, get) => ({
-  accessToken: localStorage.getItem('accessToken') || null,
-  user: readUser(),
+const useAuthStore = create((set) => ({
+  accessToken: null,   // memory only — never persisted
+  user: null,
+  setAuth: (token, user) => set({ accessToken: token, user }),
+  clearAuth: () => set({ accessToken: null, user: null }),
 
-  setAuth: ({ accessToken, user }) => {
-    if (accessToken) {
-      localStorage.setItem('accessToken', accessToken);
-      if (typeof window !== 'undefined') {
-        // Notify the realtime layer to (re)connect with the new token.
-        // Kept as a window event to avoid a circular import into the store.
-        window.dispatchEvent(
-          new CustomEvent('internops:auth', {
-            detail: { type: 'login', accessToken },
-          })
-        );
-      }
-    }
-    if (user !== undefined) {
-      if (user) localStorage.setItem('user', JSON.stringify(user));
-      else localStorage.removeItem('user');
-    }
-    set((s) => ({
-      accessToken: accessToken ?? s.accessToken,
-      user: user !== undefined ? user : s.user,
-    }));
-  },
 
   // Patch a single user field (e.g. updated name from /users/me refetch).
   patchUser: (patch) => {
@@ -45,8 +25,10 @@ const useAuthStore = create((set, get) => ({
   },
 
   logout: () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('user');
+    
+    if (typeof window !== 'undefined') {
+  localStorage.removeItem('user');
+}
     // Drop every cached query so the next login fetches fresh data, and
     // broadcast a "logout" event so axios + the websocket layer can
     // clear their own state (CSRF, in-flight requests) without us
