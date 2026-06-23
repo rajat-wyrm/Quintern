@@ -20,11 +20,17 @@ async function authMiddleware(request, reply) {
   try {
     const decoded = verifyAccessToken(token);
     const { rows } = await pool.query(
-      'SELECT suspended FROM users WHERE id = $1',
+      'SELECT suspended, token_version FROM users WHERE id = $1',
       [decoded.id]
     );
-    if (rows[0]?.suspended) {
+    if (!rows.length) {
+      return reply.status(401).send({ error: 'User not found' });
+    }
+    if (rows[0].suspended) {
       return reply.status(401).send({ error: 'Account suspended' });
+    }
+    if (decoded.v !== rows[0].token_version) {
+      return reply.status(401).send({ error: 'Token revoked' });
     }
     request.user = decoded;
   } catch {
