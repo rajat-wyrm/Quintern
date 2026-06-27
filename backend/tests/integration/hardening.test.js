@@ -333,3 +333,94 @@ describe('Attendance bulk audit log records all dates', () => {
     });
   });
 });
+describe('directManagerValidation middleware hardening (issue #41)', () => {
+  const directManager = require('../../src/middleware/directManager');
+  let internId;
+
+  beforeAll(async () => {
+    const { rows } = await pool.query(
+      "SELECT id FROM users WHERE email = 'aarav.intern@quintern.com'"
+    );
+    internId = rows[0].id;
+  });
+
+  it('fails closed for unmapped roles like INTERN when report is in hierarchy', async () => {
+    const middleware = directManager('user_id');
+    const mockReply = {
+      status: jest.fn().mockReturnThis(),
+      send: jest.fn().mockReturnThis(),
+    };
+
+    // Insert a temporary report whose manager is the intern
+    const { rows: inserted } = await pool.query(
+      `INSERT INTO users (email, password_hash, role, full_name, phone, manager_id)
+       VALUES ('temp.report@quintern.com', 'hash', 'INTERN', 'Temp Report', '+91-9000000888', $1)
+       RETURNING id`,
+      [internId]
+    );
+    const tempReportId = inserted[0].id;
+
+    try {
+      const mockRequest = {
+        user: { id: internId, role: 'INTERN' },
+        body: { user_id: tempReportId },
+      };
+
+      await middleware(mockRequest, mockReply);
+
+      expect(mockReply.status).toHaveBeenCalledWith(403);
+      expect(mockReply.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: 'This member is not in your team',
+        })
+      );
+    } finally {
+      await pool.query('DELETE FROM users WHERE id = $1', [tempReportId]);
+    }
+  });
+
+  it('rejects CAPTAIN attempting to manage a grand-report (depth 3)', async () => {
+    const middleware = directManager('user_id');
+    const mockReply = {
+      status: jest.fn().mockReturnThis(),
+      send: jest.fn().mockReturnThis(),
+    };
+
+    // Find Vikram Captain's ID
+    const { rows: captain } = await pool.query(
+      "SELECT id FROM users WHERE email = 'vikram.cap@quintern.com'"
+    );
+    const captainId = captain[0].id;
+
+    // Insert a temporary report whose manager is the intern (Aarav).
+    // Aarav reports to Vikram. So temp report (1) -> Aarav (2) -> Vikram (3).
+    // This makes the chain depth 3, which is greater than Vikram's limit of 2.
+    const { rows: inserted } = await pool.query(
+      `INSERT INTO users (email, password_hash, role, full_name, phone, manager_id)
+       VALUES ('temp.grandreport@quintern.com', 'hash', 'INTERN', 'Temp Grand Report', '+91-9000000777', $1)
+       RETURNING id`,
+      [internId]
+    );
+    const tempGrandReportId = inserted[0].id;
+
+    try {
+      const mockRequest = {
+        user: { id: captainId, role: 'CAPTAIN' },
+        body: { user_id: tempGrandReportId },
+      };
+
+      await middleware(mockRequest, mockReply);
+
+      expect(mockReply.status).toHaveBeenCalledWith(403);
+      expect(mockReply.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: 'Not your direct report or invalid step',
+          detail: 'A CAPTAIN can manage members up to 1 level(s) below in the hierarchy.',
+        })
+      );
+    } finally {
+      await pool.query('DELETE FROM users WHERE id = $1', [tempGrandReportId]);
+    }
+  });
+});
+

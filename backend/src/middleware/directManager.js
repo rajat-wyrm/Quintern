@@ -25,7 +25,7 @@ function isInSubtree(requesterRole, requesterId, targetId, pool) {
   // rows than we'll ever check.
   return new Promise(async (resolve, reject) => {
     try {
-      const cap = (MAX_CHAIN_DEPTH[requesterRole] ?? 1) + 1;
+      const cap = (MAX_CHAIN_DEPTH[requesterRole] ?? 0) + 1;
       const { rows } = await pool.query(
         `WITH RECURSIVE chain AS (
            SELECT id, manager_id, 1 AS depth
@@ -76,10 +76,11 @@ function directManagerValidation(field = 'user_id') {
 
     // `depth` is 1-based from the target walking up to the requester, so the
     // requester being the direct manager is depth 2. Cap at MAX_CHAIN_DEPTH.
-    if (depth > MAX_CHAIN_DEPTH[request.user.role]) {
+    const maxDepth = MAX_CHAIN_DEPTH[request.user.role] ?? 0;
+    if (depth > maxDepth) {
       return reply.status(403).send({
         error: 'Not your direct report or invalid step',
-        detail: `A ${request.user.role} can manage members up to ${MAX_CHAIN_DEPTH[request.user.role] - 1} level(s) below in the hierarchy.`,
+        detail: `A ${request.user.role} can manage members up to ${maxDepth > 0 ? maxDepth - 1 : 0} level(s) below in the hierarchy.`,
       });
     }
   };
